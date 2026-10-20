@@ -1,0 +1,113 @@
+# Tags containing -rc publish as prereleases; other tags create a draft release.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: check release secrets
+    runs-on: bladerunner-linux
+    timeout-minutes: 5
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_TEAM_ID != '' && secrets.MATCH_GIT_URL != '' }}
+    steps:
+      - name: Require the Android release keystore
+        run: |
+          if [ "$HAS_KEYSTORE" != 'true' ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set. See README."
+            exit 1
+          fi
+          if [ "$HAS_APPLE_SIGNING" != 'true' ]; then
+            echo "::warning::No Apple signing secrets: the iOS IPA will be unsigned and nothing goes to TestFlight."
+          fi
+
+  build:
+    needs: preflight
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      version: ${{ github.ref_name }}
+      label: ${{ github.ref_name }}
+
+  release:
+    name: github release
+    runs-on: bladerunner-linux
+    needs: build
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_rc=$([[ "$VERSION" == *-rc* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: ${{ steps.version.outputs.is_rc != 'true' }}
+          prerelease: ${{ steps.version.outputs.is_rc == 'true' }}
+          generate_release_notes: true
+          body: |
+            Build number: `${{ github.run_number }}`
+          files: |
+            artifacts/android-apk/*.apk
+            artifacts/android-aab/*.aab
+            artifacts/ios-ipa/*.ipa
+
+  testflight:
+    name: testflight
+    runs-on: bladerunner-macos
+    needs: build
+    timeout-minutes: 30
+    env:
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_TEAM_ID != '' && secrets.MATCH_GIT_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_APPLE_SIGNING == 'true'
+
+      - name: Install gems (fastlane)
+        if: env.HAS_APPLE_SIGNING == 'true'
+        run: |
+          bundle config set --local path "$HOME/.cache/null-pointer-bundle"
+          bundle install --quiet
+
+      - uses: actions/download-artifact@v4
+        if: env.HAS_APPLE_SIGNING == 'true'
+        with:
+          name: ios-ipa
+          path: ipa
+
+      - name: Upload to TestFlight
+        if: env.HAS_APPLE_SIGNING == 'true'
+        run: |
+          set -- ipa/*.ipa
+          bundle exec fastlane ios upload_testflight ipa:"$1"
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_CHANGELOG: '1'
+
+      - if: env.HAS_APPLE_SIGNING != 'true'
+        run: echo "No Apple signing secrets, skipping TestFlight."

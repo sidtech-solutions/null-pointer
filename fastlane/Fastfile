@@ -1,0 +1,75 @@
+# Signing and TestFlight only; the archive is plain xcodebuild in .github/workflows/build.yml.
+default_platform(:ios)
+
+BUNDLE_ID = "com.siddarthkay.nullpointer"
+
+def asc_api_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+    issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+    key_content: ENV.fetch("APP_STORE_CONNECT_KEY_P8_BASE64"),
+    is_key_content_base64: true,
+    in_house: false,
+  )
+end
+
+platform :ios do
+  def keychain_name
+    "null_pointer_ci_#{ENV['GITHUB_RUN_ID'] || 'local'}.keychain"
+  end
+
+  private_lane :setup_ci_keychain do
+    next unless is_ci
+
+    create_keychain(
+      name: keychain_name,
+      password: ENV.fetch("MATCH_PASSWORD"),
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false,
+    )
+
+    keychain = File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+    login = File.expand_path("~/Library/Keychains/login.keychain-db")
+    sh("security", "list-keychains", "-d", "user", "-s", keychain, login)
+  end
+
+  error do |_lane, _exception|
+    delete_keychain(name: keychain_name) rescue nil if is_ci
+  end
+
+  desc "Run once, locally: create the App Store certificate and profile in the match repo."
+  lane :init_certs do
+    match(type: "appstore", app_identifier: BUNDLE_ID, api_key: asc_api_key, readonly: false)
+  end
+
+  desc "Install the App Store certificate and profile. Read-only on CI."
+  lane :match_release do
+    setup_ci_keychain
+
+    params = { type: "appstore", app_identifier: BUNDLE_ID, api_key: asc_api_key, readonly: is_ci }
+
+    if is_ci
+      params[:keychain_name] = keychain_name
+      params[:keychain_password] = ENV.fetch("MATCH_PASSWORD")
+    end
+
+    match(**params)
+  end
+
+  desc "Delete the per-run CI keychain."
+  lane :clean_keychain do
+    delete_keychain(name: keychain_name) if is_ci && File.exist?(File.expand_path("~/Library/Keychains/#{keychain_name}-db"))
+  end
+
+  desc "Upload an already-built IPA to TestFlight: fastlane ios upload_testflight ipa:path/to.ipa"
+  lane :upload_testflight do |options|
+    upload_to_testflight(
+      api_key: asc_api_key,
+      ipa: options.fetch(:ipa),
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,
+    )
+  end
+end

@@ -1,0 +1,240 @@
+import { FlashList } from '@shopify/flash-list';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+
+import { DayMarker } from '@/components/day-marker';
+import { EmptyState } from '@/components/empty-state';
+import { Header } from '@/components/header';
+import { commitToOpen, NotificationRow } from '@/components/notification-row';
+import { RootRow } from '@/components/root-row';
+import { Text } from '@/components/text';
+import { Space, useTheme } from '@/constants/theme';
+import { useAccount } from '@/lib/account';
+import { api, nextCursor, Unauthenticated } from '@/lib/client';
+import { dayKey, dayLabel } from '@/lib/display';
+import { useNow } from '@/lib/now';
+import type { Notification } from '@/lib/types';
+
+const Types: { key: string; label: string; empty: string }[] = [
+  { key: 'all', label: 'All', empty: 'Nothing here yet. Follows, stars, replies, quotes, mentions, and moderation updates for your commits will show up here.' },
+  { key: 'replies', label: 'Replies', empty: 'No replies yet. When someone replies to one of your commits, it shows up here.' },
+  { key: 'quotes', label: 'Quotes', empty: 'No quotes yet. When someone quotes one of your commits, it shows up here.' },
+  { key: 'stars', label: 'Stars', empty: 'No stars yet. When someone stars one of your commits, it shows up here.' },
+  { key: 'mentions', label: 'Mentions', empty: 'No mentions yet. When someone mentions you in a commit, it shows up here.' },
+  { key: 'follows', label: 'Follows', empty: 'No follows yet. When someone follows you, it shows up here.' },
+  { key: 'moderation', label: 'Moderation', empty: 'No moderation updates yet.' },
+];
+
+type Row = { type: 'day'; key: string; label: string } | { type: 'notification'; key: string; notification: Notification; hasPrevious: boolean };
+
+type Group = { items: Notification[]; hasMore: boolean; cursor: string | null; failed: boolean };
+
+export default function NotificationsScreen() {
+  const theme = useTheme();
+  const router = useRouter();
+  const account = useAccount();
+  const queryClient = useQueryClient();
+  const now = useNow();
+  const [type, setType] = useState('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const [open, setOpen] = useState<Record<string, Group | null>>({});
+  // Listing marks everything read on devnull, so "new" is judged against the time each filter was first loaded here.
+  const readAt = useRef<Record<string, number>>({});
+
+  const query = useInfiniteQuery({
+    queryKey: ['notifications', type],
+    queryFn: ({ pageParam }) => api.notifications(type, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => nextCursor(last),
+    enabled: account.status === 'signed-in',
+  });
+
+  useEffect(() => {
+    if (query.isSuccess) {
+      readAt.current[type] ??= Date.now();
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    }
+  }, [query.isSuccess, type, queryClient]);
+
+  useEffect(() => {
+    if (query.error instanceof Unauthenticated) {
+      account.signOut().then(() => router.replace('/onboarding'));
+    }
+  }, [query.error, account, router]);
+
+  const notifications = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
+
+  const rows = useMemo<Row[]>(() => {
+    const out: Row[] = [];
+    let previousDay: string | null = null;
+
+    notifications.forEach((notification) => {
+      const day = notification.created_at ? dayKey(notification.created_at) : null;
+
+      if (day !== null && day !== previousDay) {
+        const label = dayLabel(notification.created_at!, now);
+        out.push({ type: 'day', key: `day-${label}-${notification.id}`, label });
+        previousDay = day;
+        out.push({ type: 'notification', key: notification.id, notification, hasPrevious: false });
+      } else {
+        out.push({ type: 'notification', key: notification.id, notification, hasPrevious: out.length > 0 });
+      }
+    });
+
+    return out;
+  }, [notifications, now]);
+
+  const isNew = useCallback(
+    (notification: Notification): boolean => {
+      const since = readAt.current[type];
+
+      if (since === undefined) {
+        return false;
+      }
+
+      if ((notification.unread_count ?? 0) > 0 || notification.read_at === null) {
+        return true;
+      }
+
+      const read = notification.read_at ? Date.parse(notification.read_at) : NaN;
+
+      return !Number.isNaN(read) && read >= since - 60_000;
+    },
+    [type],
+  );
+
+  const loadGroup = useCallback(
+    async (notification: Notification, older = false) => {
+      const current = open[notification.id];
+      const cursor = older ? (current?.cursor ?? null) : null;
+
+      try {
+        const page = await api.notificationGroup(notification.group_id ?? notification.id, type, cursor);
+
+        setOpen((state) => {
+          const existing = older ? (state[notification.id]?.items ?? []) : [];
+
+          return { ...state, [notification.id]: { items: [...existing, ...page.data], hasMore: nextCursor(page) !== null, cursor: nextCursor(page), failed: false } };
+        });
+      } catch {
+        setOpen((state) => ({ ...state, [notification.id]: { items: state[notification.id]?.items ?? [], hasMore: false, cursor: null, failed: true } }));
+      }
+    },
+    [open, type],
+  );
+
+  const toggleGroup = useCallback(
+    (notification: Notification) => {
+      if (notification.id in open) {
+        setOpen((state) => {
+          const next = { ...state };
+          delete next[notification.id];
+
+          return next;
+        });
+
+        return;
+      }
+
+      setOpen((state) => ({ ...state, [notification.id]: null }));
+      loadGroup(notification);
+    },
+    [open, loadGroup],
+  );
+
+  const openNotification = useCallback(
+    (notification: Notification) => {
+      const commit = commitToOpen(notification);
+
+      if (commit) {
+        router.push({ pathname: '/commits/[id]', params: { id: commit } });
+      } else if (notification.actor?.username) {
+        router.push({ pathname: '/users/[username]', params: { username: notification.actor.username } });
+      }
+    },
+    [router],
+  );
+
+  const refresh = async () => {
+    setRefreshing(true);
+
+    try {
+      await query.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const changeType = (next: string) => {
+    setType(next);
+    setOpen({});
+  };
+
+  const active = Types.find((option) => option.key === type) ?? Types[0];
+
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.surface }]}>
+      <Header title="Notifications" />
+      <View style={[styles.filters, { borderBottomColor: theme.hairline, backgroundColor: theme.surface }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {Types.map((option) => (
+            <Pressable key={option.key} onPress={() => changeType(option.key)} style={styles.filter} accessibilityRole="tab" accessibilityState={{ selected: option.key === type }}>
+              <Text variant="nav" muted={option.key !== type}>{option.label}</Text>
+              <View style={[styles.underline, { backgroundColor: option.key === type ? theme.primary : 'transparent' }]} />
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      <FlashList
+        data={rows}
+        keyExtractor={(row) => row.key}
+        getItemType={(row) => row.type}
+        renderItem={({ item }) =>
+          item.type === 'day' ? (
+            <DayMarker label={item.label} />
+          ) : (
+            <NotificationRow
+              notification={item.notification}
+              isNew={isNew(item.notification)}
+              hasPrevious={item.hasPrevious}
+              open={item.notification.id in open}
+              group={open[item.notification.id]}
+              onPress={openNotification}
+              onToggleGroup={toggleGroup}
+              onOpenItem={openNotification}
+              onLoadOlder={(notification) => loadGroup(notification, true)}
+            />
+          )
+        }
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) {
+            query.fetchNextPage();
+          }
+        }}
+        onEndReachedThreshold={0.6}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.inkMuted} />}
+        ListEmptyComponent={
+          query.isPending ? null : query.isError ? (
+            <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
+          ) : (
+            <EmptyState fatal={type === 'all' ? '$ cat /dev/notifications' : `$ cat /dev/notifications | grep ${type}`} action={type === 'all' ? undefined : 'All notifications'} onAction={() => changeType('all')}>
+              {active.empty}
+            </EmptyState>
+          )
+        }
+        ListFooterComponent={notifications.length > 0 && !query.hasNextPage ? <RootRow>That’s the oldest notification. There’s nothing before it.</RootRow> : null}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  filters: { borderBottomWidth: StyleSheet.hairlineWidth },
+  filterRow: { paddingHorizontal: Space.gutter - 8 },
+  filter: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 12, gap: 8 },
+  underline: { height: 3, alignSelf: 'stretch', borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+});

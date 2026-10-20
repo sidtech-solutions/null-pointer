@@ -1,0 +1,248 @@
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to stamp on the build (a v-prefixed tag is fine). Empty keeps app.json's.
+        type: string
+        default: ''
+      label:
+        description: Suffix for artifact file names.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  DEVELOPER_DIR: ${{ vars.XCODE_DEVELOPER_DIR || '/Applications/Xcode.app/Contents/Developer' }}
+
+jobs:
+  check:
+    name: lint + typecheck + test
+    runs-on: bladerunner-linux
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx expo lint --max-warnings 0
+
+      - run: npx tsc --noEmit
+
+      - run: npx jest --ci
+
+  android:
+    name: android apk
+    runs-on: bladerunner-linux
+    needs: check
+    timeout-minutes: 60
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Explicit packages: the action's default list includes the retired `tools`
+      # package, which sdkmanager 16+ rejects. Versions match react-native/gradle/libs.versions.toml.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0 ndk;27.1.12297006'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Version from tag
+        if: inputs.version != ''
+        run: echo "APP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Decode release keystore
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Generate android/
+        run: npx expo prebuild --platform android --no-install
+
+      # services.gradle.org is slow from this runner; retry the wrapper download.
+      - name: Fetch Gradle distribution
+        run: |
+          cd android
+          for attempt in 1 2 3 4 5; do
+            ./gradlew --version --no-daemon && exit 0
+            echo "Gradle download attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          exit 1
+
+      - name: Build release APK and AAB
+        run: cd android && ./gradlew assembleRelease bundleRelease --no-daemon
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Name the APK and AAB
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/null-pointer-${{ inputs.label }}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "out/null-pointer-${{ inputs.label }}.aab"
+          if [ "$HAS_KEYSTORE" != 'true' ]; then echo "::notice::APK and AAB are signed with the debug keystore (no ANDROID_KEYSTORE_BASE64 secret)."; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: out/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: out/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: ios ipa
+    runs-on: bladerunner-macos
+    needs: check
+    timeout-minutes: 90
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_TEAM_ID != '' && secrets.MATCH_GIT_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install gems (fastlane, CocoaPods)
+        run: |
+          bundle config set --local path "$HOME/.cache/null-pointer-bundle"
+          bundle install --quiet
+
+      - run: npm ci
+
+      - name: Version from tag
+        if: inputs.version != ''
+        run: echo "APP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+        env:
+          VERSION: ${{ inputs.version }}
+
+      - name: Generate ios/ and install pods
+        run: npx expo prebuild --platform ios --no-install && cd ios && bundle exec pod install
+
+      - name: Find the workspace
+        run: |
+          set -- ios/*.xcworkspace
+          WORKSPACE=$1
+          echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+          echo "SCHEME=$(basename "$WORKSPACE" .xcworkspace)" >> "$GITHUB_ENV"
+
+      - name: Write match SSH key
+        if: env.HAS_APPLE_SIGNING == 'true'
+        run: |
+          KEY="$RUNNER_TEMP/match_key"
+          printf '%s\n' "$MATCH_DEPLOY_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          echo "GIT_SSH_COMMAND=ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" >> "$GITHUB_ENV"
+        env:
+          MATCH_DEPLOY_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
+
+      - name: Install App Store certificate and profile
+        if: env.HAS_APPLE_SIGNING == 'true'
+        run: bundle exec fastlane ios match_release
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8_BASE64 }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_CHANGELOG: '1'
+
+      - name: Archive (signed)
+        if: env.HAS_APPLE_SIGNING == 'true'
+        run: |
+          set -o pipefail
+          pretty() { if command -v xcbeautify >/dev/null; then xcbeautify; else cat; fi; }
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build -archivePath ios/build/app.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="match AppStore com.siddarthkay.nullpointer" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            archive 2>&1 | tee ios/build/xcodebuild.log | pretty
+          xcodebuild -exportArchive -archivePath ios/build/app.xcarchive -exportPath ios/build/ipa \
+            -exportOptionsPlist .github/ios/ExportOptions-AppStore.plist
+          mkdir -p out
+          cp ios/build/ipa/*.ipa "out/null-pointer-${{ inputs.label }}.ipa"
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # Without Apple secrets: unsigned archive zipped into an IPA. Re-sign it to install.
+      - name: Archive (unsigned)
+        if: env.HAS_APPLE_SIGNING != 'true'
+        run: |
+          set -o pipefail
+          pretty() { if command -v xcbeautify >/dev/null; then xcbeautify; else cat; fi; }
+          mkdir -p ios/build
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath ios/build -archivePath ios/build/app.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive 2>&1 | tee ios/build/xcodebuild.log | pretty
+          set -- ios/build/app.xcarchive/Products/Applications/*.app
+          APP=$1
+          rm -rf ios/build/Payload && mkdir -p ios/build/Payload out
+          cp -R "$APP" ios/build/Payload/
+          (cd ios/build && zip -qr "../../out/null-pointer-${{ inputs.label }}-unsigned.ipa" Payload)
+          echo "::notice::IPA is unsigned (no APPLE_TEAM_ID / MATCH_GIT_URL secrets)."
+
+      - name: Remove the CI keychain
+        if: always() && env.HAS_APPLE_SIGNING == 'true'
+        run: bundle exec fastlane ios clean_keychain || true
+
+      - name: Upload xcodebuild log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log-${{ github.run_id }}
+          path: ios/build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: out/*.ipa
+          if-no-files-found: error
+          retention-days: 14

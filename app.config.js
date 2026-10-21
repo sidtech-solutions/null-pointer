@@ -10,9 +10,5 @@ module.exports = ({ config }) => {
       ...config.ios,
       buildNumber: buildNumber || config.ios.buildNumber,
     },
-    android: {
-      ...config.android,
-      versionCode: buildNumber ? Number(buildNumber) : config.android.versionCode,
-    },
   };
 };

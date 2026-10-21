@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.3'
           cache: npm
 
       - run: npm ci
@@ -59,20 +59,27 @@ jobs:
       # package, which sdkmanager 16+ rejects. Versions match react-native/gradle/libs.versions.toml.
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0 ndk;27.1.12297006'
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0 build-tools;34.0.0 ndk;27.1.12297006'
 
       - uses: gradle/actions/setup-gradle@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.3'
           cache: npm
 
       - run: npm ci
 
       - name: Version from tag
         if: inputs.version != ''
-        run: echo "APP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+        run: |
+          VERSION="${VERSION#v}"
+          APP_JSON_VERSION=$(node -p "require('./app.json').expo.version")
+          if [ "${VERSION%%-*}" != "$APP_JSON_VERSION" ]; then
+            echo "::error::Tag version $VERSION does not match app.json version $APP_JSON_VERSION. Bump version and android.versionCode in app.json before tagging."
+            exit 1
+          fi
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
         env:
           VERSION: ${{ inputs.version }}
 
@@ -98,19 +105,32 @@ jobs:
           done
           exit 1
 
-      - name: Build release APK and AAB
+      - name: Build release APK and AAB (unsigned)
         run: cd android && ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Sign the APK and AAB
+        run: |
+          mkdir -p out
+          if [ "$HAS_KEYSTORE" = 'true' ]; then
+            KS="$ANDROID_KEYSTORE_PATH"
+            ALIAS="$ANDROID_KEY_ALIAS"
+            export KS_PASS="$ANDROID_KEYSTORE_PASSWORD" KEY_PASS="$ANDROID_KEY_PASSWORD"
+          else
+            KS=android/app/debug.keystore
+            ALIAS=androiddebugkey
+            export KS_PASS=android KEY_PASS=android
+            echo "::notice::APK and AAB are signed with the debug keystore (no ANDROID_KEYSTORE_BASE64 secret)."
+          fi
+          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          "$APKSIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --ks-key-alias "$ALIAS" --key-pass env:KEY_PASS \
+            --out "out/null-pointer-${{ inputs.label }}.apk" android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$APKSIGNER" verify --print-certs "out/null-pointer-${{ inputs.label }}.apk" | grep -i 'SHA-256'
+          jarsigner -keystore "$KS" -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+            -signedjar "out/null-pointer-${{ inputs.label }}.aab" android/app/build/outputs/bundle/release/app-release.aab "$ALIAS"
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
-      - name: Name the APK and AAB
-        run: |
-          mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk "out/null-pointer-${{ inputs.label }}.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "out/null-pointer-${{ inputs.label }}.aab"
-          if [ "$HAS_KEYSTORE" != 'true' ]; then echo "::notice::APK and AAB are signed with the debug keystore (no ANDROID_KEYSTORE_BASE64 secret)."; fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -139,7 +159,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.23.3'
           cache: npm
 
       - name: Install gems (fastlane, CocoaPods)
@@ -151,7 +171,14 @@ jobs:
 
       - name: Version from tag
         if: inputs.version != ''
-        run: echo "APP_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+        run: |
+          VERSION="${VERSION#v}"
+          APP_JSON_VERSION=$(node -p "require('./app.json').expo.version")
+          if [ "${VERSION%%-*}" != "$APP_JSON_VERSION" ]; then
+            echo "::error::Tag version $VERSION does not match app.json version $APP_JSON_VERSION. Bump version and android.versionCode in app.json before tagging."
+            exit 1
+          fi
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
         env:
           VERSION: ${{ inputs.version }}
 

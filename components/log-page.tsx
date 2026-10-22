@@ -41,6 +41,7 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
   const [held, setHeld] = useState<{ commits: Commit[]; count: number; more: boolean }>({ commits: [], count: 0, more: false });
   const [marker, setMarker] = useState<string | null>(null);
   const visitSeen = useRef<string | null | undefined>(undefined);
+  const merged = useRef<Page<Commit> | undefined>(undefined);
 
   useImperativeHandle(ref, () => ({ scrollToTop: () => list.current?.scrollToOffset({ offset: 0, animated: true }) }), []);
 
@@ -99,10 +100,14 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
       }
     }
 
-    if (changed.size > 0) {
-      queryClient.setQueryData<InfiniteData<Page<Commit>>>(['log', log], (data) =>
-        data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((commit) => changed.get(commit.id) ?? commit) })) } : data,
-      );
+    if (merged.current !== fresh) {
+      merged.current = fresh;
+
+      if (changed.size > 0) {
+        queryClient.setQueryData<InfiniteData<Page<Commit>>>(['log', log], (data) =>
+          data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((commit) => changed.get(commit.id) ?? commit) })) } : data,
+        );
+      }
     }
 
     const count = Math.max(newer.length, fresh.new_commits_count ?? 0);

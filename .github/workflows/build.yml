@@ -45,7 +45,6 @@ jobs:
     needs: check
     timeout-minutes: 60
     env:
-      BUILD_NUMBER: ${{ github.run_number }}
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +106,17 @@ jobs:
 
       - name: Build release APK and AAB (unsigned)
         run: cd android && ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Pin R8 pg-map-id in the APK
+        run: |
+          pip install --quiet 'git+https://gitlab.com/fdroid/reproducible-apk-tools.git@ca728486d42a79f1c9ec0c6ec755c39f251911a8'
+          repro-apk-inplace-fix --internal --zipalign --page-size 16 fix-pg-map-id \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            79fbe02c536c0d7d313189437f3e697188963895b68d4840a060177ec4e9bd95
 
       - name: Sign the APK and AAB
         run: |

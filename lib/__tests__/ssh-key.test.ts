@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Namespace, signedMessage } from '../signer';
+import { ImagesNamespace, Namespace, signedMessage } from '../signer';
 import { SshKey } from '../ssh-key';
 
 function freshKey(): SshKey {
@@ -70,4 +70,25 @@ test('rebuilds the same key from its seed', () => {
 
 test('joins the signed message with newlines and an uppercase method', () => {
   expect(signedMessage('1', 'n', 'get', '/api/v1/me', '')).toBe('1\nn\nGET\n/api/v1/me\n');
+});
+
+test('a request with images carries the image hashes before the body and its own namespace', () => {
+  const hashes = ['a'.repeat(64), 'b'.repeat(64)];
+
+  expect(signedMessage('1', 'n', 'post', '/api/v1/commits', '{"body":"x"}', hashes)).toBe(`1\nn\nPOST\n/api/v1/commits\n${hashes.join(',')}\n{"body":"x"}`);
+
+  const key = freshKey();
+  const message = signedMessage('1700000000', 'abc123', 'POST', '/api/v1/commits', '{"body":"Shipped!"}', hashes);
+  const dir = mkdtempSync(join(tmpdir(), 'null-pointer-'));
+
+  writeFileSync(join(dir, 'allowed_signers'), `devnull-mobile ${key.openSsh()}\n`);
+  writeFileSync(join(dir, 'message.sig'), armour(key.sign(message, ImagesNamespace)));
+
+  const output = execFileSync(
+    'ssh-keygen',
+    ['-Y', 'verify', '-f', join(dir, 'allowed_signers'), '-I', 'devnull-mobile', '-n', ImagesNamespace, '-s', join(dir, 'message.sig')],
+    { input: message },
+  ).toString();
+
+  expect(output).toContain(`Good "${ImagesNamespace}" signature`);
 });

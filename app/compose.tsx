@@ -1,19 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitBody } from '@/components/commit-body';
-import { BodyCounter, ComposerInput, StashLabel } from '@/components/composer';
+import { AttachmentStrip, BodyCounter, ComposerInput, ComposerToolbar, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
 import { laneColor, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError } from '@/lib/client';
 import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
-import { fits, relativeTime, shortHash } from '@/lib/display';
+import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
+import { useKeyboardShown } from '@/lib/keyboard';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
+import type { NewPoll } from '@/lib/types';
 
 export default function ComposeScreen() {
   const theme = useTheme();
@@ -27,6 +29,9 @@ export default function ComposeScreen() {
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [poll, setPoll] = useState<NewPoll | null>(null);
+  const attachments = useAttachments();
+  const keyboardShown = useKeyboardShown();
 
   const quoted = useQuery({
     queryKey: ['commit', quote],
@@ -53,38 +58,68 @@ export default function ComposeScreen() {
     }
   }, [body, ready, account.user?.id, stashName]);
 
+  const hasImages = attachments.images.length > 0;
+  // With images the body may be empty; a poll needs its question. Either way a non-empty body must fit.
+  const bodyReady = hasImages && body.trim() === '' ? true : fits(body);
+  const canCommit = bodyReady && length(body) <= MaxLength && (poll === null || pollFits(poll));
+
   const commit = useMutation({
-    mutationFn: () => api.createCommit(body.trim(), null, quote ?? null),
+    mutationFn: async () => {
+      const { uploads, descriptions } = await toUploads(attachments.images);
+
+      return api.createCommit(body.trim(), { quotedCommitId: quote ?? null, images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
+    },
     onSuccess: async (created) => {
       await dropStash(account.user?.id, stashName);
       setBody('');
+      attachments.clear();
+      setPoll(null);
       prependCommit(queryClient, created);
       queryClient.invalidateQueries({ queryKey: ['log'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       router.back();
-      toast(`[log ${created.short_hash || shortHash(created.id)}] ${created.body.split('\n')[0].slice(0, 60)}`);
+      toast(`[log ${created.short_hash || shortHash(created.id)}] ${(created.body || (created.images?.length ? `${created.images.length} ${created.images.length === 1 ? 'image' : 'images'}` : '')).split('\n')[0].slice(0, 60)}`);
     },
-    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : 'fatal: could not commit.'),
+    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not commit.'),
   });
 
   const accent = account.user ? laneColor(theme, account.user.lane) : theme.primary;
   const handle = quoted.data?.commit.author?.username;
+  const busy = commit.isPending;
+
+  const cancel = () => {
+    if (hasImages || poll) {
+      Alert.alert('Discard this commit?', hasImages ? 'Your text is kept, the images are not.' : 'Your text is kept, the poll is not.', [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+      ]);
+
+      return;
+    }
+
+    router.back();
+  };
+
+  const togglePoll = () => {
+    setError(null);
+    setPoll((current) => (current ? null : emptyPoll));
+  };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? 12 : insets.top }]}>
+    <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? 12 : insets.top }]}>
       <View style={[styles.bar, { borderBottomColor: theme.hairline }]}>
-        <Pressable onPress={() => router.back()} style={styles.barButton} accessibilityRole="button" accessibilityHint="Keeps your draft for next time">
+        <Pressable onPress={cancel} disabled={busy} hitSlop={8} style={styles.barButton} accessibilityRole="button" accessibilityHint="Keeps your draft for next time">
           <Text variant="nav">Cancel</Text>
         </Pressable>
         <Text variant="name" numberOfLines={1} style={styles.title}>{quote ? `Quote @${handle ?? ''}` : 'New commit'}</Text>
         <View style={styles.barButton}>
-          <Pressable onPress={() => commit.mutate()} disabled={!fits(body) || commit.isPending} style={[styles.commit, { backgroundColor: accent, opacity: fits(body) && !commit.isPending ? 1 : 0.5 }]} accessibilityRole="button">
-            <Text variant="label" color={theme.primaryInk}>Commit</Text>
+          <Pressable onPress={() => commit.mutate()} disabled={!canCommit || busy} style={[styles.commit, { backgroundColor: accent, opacity: canCommit || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canCommit || busy, busy }}>
+            {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Commit</Text>}
           </Pressable>
         </View>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body} style={styles.scroll}>
         {error && <Text variant="small" color={theme.destructive}>{error}</Text>}
 
         <ComposerInput
@@ -95,11 +130,16 @@ export default function ComposeScreen() {
               setRestored(false);
             }
           }}
-          placeholder={quote ? 'Add your take' : 'What did you ship?'}
+          placeholder={quote ? 'Add your take' : poll ? 'Ask a question' : hasImages ? 'Say something about it (optional)' : 'What did you ship?'}
           autoFocus
+          editable={!busy}
           accessibilityLabel="Your commit"
           style={styles.input}
         />
+
+        <AttachmentStrip attachments={attachments} />
+
+        {poll && <PollEditor poll={poll} onChange={setPoll} onRemove={() => setPoll(null)} />}
 
         {quoted.data && (
           <View style={[styles.quoted, { borderColor: theme.hairline }]}>
@@ -110,8 +150,10 @@ export default function ComposeScreen() {
             <CommitBody body={quoted.data.commit.body} size={14} numberOfLines={6} />
           </View>
         )}
+      </ScrollView>
 
-        <View style={styles.counterRow}>
+      <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
+        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote}>
           {restored && (
             <StashLabel
               onDrop={() => {
@@ -121,10 +163,9 @@ export default function ComposeScreen() {
               }}
             />
           )}
-          <View style={styles.spacer} />
           <BodyCounter body={body} />
-        </View>
-      </ScrollView>
+        </ComposerToolbar>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -132,15 +173,15 @@ export default function ComposeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   bar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 12, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
-  barButton: { minWidth: 96, justifyContent: 'center', alignItems: 'flex-start' },
+  barButton: { minWidth: 96, minHeight: 44, justifyContent: 'center', alignItems: 'flex-start' },
   title: { flex: 1, textAlign: 'center', fontSize: 16 },
-  commit: { alignSelf: 'flex-end', height: 36, paddingHorizontal: 16, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  body: { paddingHorizontal: Space.gutterWide - 4, paddingTop: 16, paddingBottom: 40, gap: 16 },
+  commit: { alignSelf: 'flex-end', height: 36, minWidth: 84, paddingHorizontal: 16, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  scroll: { flex: 1 },
+  body: { paddingHorizontal: Space.gutterWide - 4, paddingTop: 16, paddingBottom: 24, gap: 16 },
   input: { minHeight: 120 },
   quoted: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
   quotedHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   quotedName: { flexShrink: 1, fontSize: 14 },
   tiny: { fontSize: 12, lineHeight: 16 },
-  counterRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 20 },
-  spacer: { flex: 1 },
+  footer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter - 4, paddingTop: 4, gap: 8 },
 });

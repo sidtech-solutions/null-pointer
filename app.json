@@ -40,6 +40,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "null-pointer uses your photos to attach images to a commit.",
+          "cameraPermission": "null-pointer uses the camera to take a photo for a commit.",
+          "microphonePermission": false
+        }
+      ],
       "./plugins/with-unsigned-release",
       "./plugins/with-gradle-wrapper-timeout",
       "./plugins/with-reproducible-build",

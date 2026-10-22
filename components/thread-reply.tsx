@@ -58,13 +58,13 @@ export const ThreadReply = memo(function ThreadReply({
   const avatarLine = AvatarLine + indent;
 
   return (
-    <Pressable onPress={deleted ? undefined : () => handlers.onOpen?.(reply)} disabled={deleted} style={[styles.row, { backgroundColor: theme.surface }]}>
+    <View style={[styles.row, { backgroundColor: theme.surface }]}>
       <View style={styles.content}>
         <View style={[styles.reply, { paddingLeft: indent }, last && more === undefined && styles.lastReply]}>
           {deleted ? (
             <View style={[styles.avatar, { borderColor: theme.rail }]} />
           ) : (
-            <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(reply.author) : undefined} hitSlop={6} accessibilityLabel={`${reply.author.name || reply.author.username}'s profile`}>
+            <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(reply.author) : undefined} hitSlop={10} accessibilityLabel={`${reply.author.name || reply.author.username}'s profile`}>
               <Avatar user={reply.author} size={24} />
             </Pressable>
           )}
@@ -85,13 +85,16 @@ export const ThreadReply = memo(function ThreadReply({
               </View>
             ) : (
               <>
-                <View style={styles.header}>
-                  <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, muted && styles.mutedName]}>{reply.author.name || reply.author.username}</Text>
-                  <Text variant="mono" muted style={styles.tiny}>·</Text>
-                  <RelativeTime iso={reply.created_at} style={styles.tiny} />
-                </View>
-                <CommitBody body={reply.body} segments={reply.body_segments} size={muted ? 14 : 15} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ username } as Commit['author']) : undefined} />
-                <CommitMedia images={reply.images} preview={reply.link_preview} compact />
+                {/* The text opens the reply; the actions under it are siblings, never nested in the press area. */}
+                <Pressable onPress={() => handlers.onOpen?.(reply)} style={({ pressed }) => [styles.press, pressed && styles.pressed]} accessibilityRole="button" accessibilityHint="Opens the reply">
+                  <View style={styles.header}>
+                    <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, muted && styles.mutedName]}>{reply.author.name || reply.author.username}</Text>
+                    <Text variant="mono" muted style={styles.tiny}>·</Text>
+                    <RelativeTime iso={reply.created_at} style={styles.tiny} />
+                  </View>
+                  <CommitBody body={reply.body} segments={reply.body_segments} size={muted ? 14 : 15} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ username } as Commit['author']) : undefined} />
+                  <CommitMedia images={reply.images} preview={reply.link_preview} compact />
+                </Pressable>
                 <CommitActions commit={reply} viewerId={viewerId} compact={muted} withQuote={false} expandable={false} handlers={handlers} />
               </>
             )}
@@ -119,7 +122,7 @@ export const ThreadReply = memo(function ThreadReply({
       {previousLane === undefined ? <ThreadElbow lane={lane} from={indent > 0 ? AvatarLine : undefined} to={Space.rail + indent} /> : <DashedLine lane={previousLane} x={avatarLine} top={0} height={6} />}
       {hasNext && <DashedLine lane={own} x={avatarLine} top={38} bottom={more ? 34 : 0} />}
       {nestedOpen && <DashedLine lane={theme.rail} x={avatarLine} top={38} bottom={0} />}
-    </Pressable>
+    </View>
   );
 });
 
@@ -130,6 +133,8 @@ const styles = StyleSheet.create({
   lastReply: { paddingBottom: 12 },
   avatar: { width: 24, height: 24, borderRadius: Radius.full, borderWidth: 2, borderStyle: 'dashed' },
   column: { flex: 1, gap: 4 },
+  press: { gap: 4 },
+  pressed: { opacity: 0.7 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 24 },
   name: { flexShrink: 1, fontSize: 14 },
   mutedName: { fontSize: 13 },

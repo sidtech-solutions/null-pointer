@@ -135,3 +135,17 @@ export type CurrentUser = {
   pasteis_remaining: number | null;
   pasteis_resets_at: string | null;
 };
+
+export const PollDurations = [
+  { minutes: 60, label: '1 hour' },
+  { minutes: 1440, label: '1 day' },
+  { minutes: 4320, label: '3 days' },
+  { minutes: 10080, label: '7 days' },
+] as const;
+
+export type PollDuration = (typeof PollDurations)[number]['minutes'];
+
+/** A poll being composed: 2 to 4 options of up to 50 characters, and how long it runs. */
+export type NewPoll = { options: string[]; duration: PollDuration };
+
+export const PollLimits = { minOptions: 2, maxOptions: 4, maxOptionLength: 50 } as const;

@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { Check } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -44,7 +44,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
 
   return (
     <Modal visible={commit !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom }]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom }]}>
         {send.isSuccess ? (
           <View style={styles.received}>
             <View style={styles.receivedRow}>

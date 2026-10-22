@@ -1,7 +1,8 @@
+import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Commit, CommitThread, Connection, CurrentUser, Notification, Page, Profile, User } from './types';
+import type { Commit, CommitThread, Connection, CurrentUser, NewPoll, Notification, Page, Profile, User } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -71,25 +72,50 @@ function target(path: string, query: Query): string {
   return `${split().prefix}/api/v1/${path}${queryString === '' ? '' : `?${queryString}`}`;
 }
 
+/** A file to upload beside a JSON payload: the exact bytes sent, and their SHA-256 (hex) as the server will check it. */
+export type Upload = { name: string; type: string; bytes: Uint8Array; sha256: string };
+
+// Expo's fetch builds the multipart body itself from parts that expose bytes(),
+// so every part is sent exactly as hashed and signed.
+function part(name: string, type: string, bytes: Uint8Array): Blob {
+  return { name, type, size: bytes.byteLength, bytes: () => Promise.resolve(bytes) } as unknown as Blob;
+}
+
 // Query string and body are built here and sent as the exact bytes that were signed.
-async function send(method: string, path: string, query: Query = {}, payload?: unknown): Promise<any> {
+// With uploads the request is multipart: the JSON in a `payload` file part, the
+// files in `images[]`, nothing else, and the signature covers the files' hashes.
+async function send(method: string, path: string, query: Query = {}, payload?: unknown, uploads?: Upload[]): Promise<any> {
   const key = await currentKey();
   const requestTarget = target(path, query);
   const body = payload === undefined ? '' : JSON.stringify(payload);
+  const nonce = randomHex(16);
+  const withUploads = uploads !== undefined && uploads.length > 0;
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...signatureHeaders(key, method, requestTarget, body, Math.floor(Date.now() / 1000), randomHex(16)),
+    ...signatureHeaders(key, method, requestTarget, body, Math.floor(Date.now() / 1000), nonce, withUploads ? uploads.map((upload) => upload.sha256) : undefined),
   };
 
-  if (payload !== undefined) {
+  let request: RequestInit = { method, headers };
+
+  if (withUploads) {
+    const form = new FormData();
+    form.append('payload', part('payload.json', 'application/json', utf8(body)));
+    uploads.forEach((upload) => form.append('images[]', part(upload.name, upload.type, upload.bytes)));
+    request = { method, headers, body: form };
+  } else if (payload !== undefined) {
     headers['Content-Type'] = 'application/json';
+    request = { method, headers, body };
   }
 
   let response: Response;
 
   try {
-    response = await fetch(split().origin + requestTarget, { method, headers, body: payload === undefined ? undefined : body });
-  } catch {
+    response = await fetch(split().origin + requestTarget, request);
+  } catch (exception) {
+    if (__DEV__) {
+      console.warn(`[devnull] ${method} ${requestTarget} failed:`, exception);
+    }
+
     throw ApiError.couldNotConnect(baseUrl());
   }
 
@@ -196,17 +222,34 @@ export const api = {
     return send('GET', `commits/${encode(id)}/replies`, { cursor });
   },
 
-  /** The API accepts parentId or quotedCommitId, not both. */
-  async createCommit(body: string, parentId?: string | null, quotedCommitId?: string | null): Promise<Commit> {
-    const payload: Record<string, string> = { body };
+  /**
+   * The API accepts parentId or quotedCommitId, not both. A poll goes only on a
+   * top-level commit without images; images may go on anything. The body may be
+   * empty when there are images.
+   */
+  async createCommit(body: string, options: { parentId?: string | null; quotedCommitId?: string | null; images?: Upload[]; descriptions?: string[]; poll?: NewPoll | null } = {}): Promise<Commit> {
+    const payload: Record<string, unknown> = { body };
 
-    if (parentId) {
-      payload.parent_id = parentId;
-    } else if (quotedCommitId) {
-      payload.quoted_commit_id = quotedCommitId;
+    if (options.parentId) {
+      payload.parent_id = options.parentId;
+    } else if (options.quotedCommitId) {
+      payload.quoted_commit_id = options.quotedCommitId;
     }
 
-    return (await send('POST', 'commits', {}, payload)).data;
+    if (options.poll) {
+      payload.poll = { options: options.poll.options, duration: options.poll.duration };
+    }
+
+    if (options.images && options.images.length > 0 && options.descriptions?.some((description) => description !== '')) {
+      payload.image_descriptions = options.images.map((_, index) => options.descriptions?.[index] || null);
+    }
+
+    return (await send('POST', 'commits', {}, payload, options.images)).data;
+  },
+
+  /** Votes are final. Answers with the commit, its poll now showing results. */
+  async votePoll(commitId: string, optionId: string): Promise<Commit> {
+    return (await send('POST', `commits/${encode(commitId)}/poll/votes`, {}, { option: optionId })).data;
   },
 
   starred(cursor?: string | null): Promise<Page<Commit>> {

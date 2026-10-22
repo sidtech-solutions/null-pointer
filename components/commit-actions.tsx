@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Ellipsis, MessageSquareReply, Quote, Star } from 'lucide-react-native';
 import { Image } from 'expo-image';
+import type { ReactNode } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/text';
@@ -19,9 +20,32 @@ export type CommitHandlers = {
   onToggleReplies?: (commit: Commit) => void;
   onReport?: (commit: Commit) => void;
   onPastel?: (commit: Commit) => void;
+  onVote?: (commit: Commit, optionId: string) => void;
   /** Pastéis left today, or null when the mode is off. */
   pasteisLeft?: number | null;
 };
+
+/** Every control in the row is at least 44pt tall and 48pt wide: a thumb target, not a pointer target. */
+export const ActionHeight = 44;
+
+// Each action is a sibling of the row's own press area, never nested in it, so
+// a tap near the icon can only hit the action or nothing: it never opens the commit.
+export function Action({ onPress, disabled = false, label, centered = false, children }: { onPress?: () => void; disabled?: boolean; label: string; centered?: boolean; children: ReactNode }) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled || !onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      android_ripple={{ color: theme.wash, borderless: true, radius: 24 }}
+      hitSlop={{ top: 2, bottom: 2 }}
+      style={({ pressed }) => [styles.action, centered && styles.centered, pressed && styles.pressed]}>
+      {children}
+    </Pressable>
+  );
+}
 
 export function CommitActions({
   commit,
@@ -54,7 +78,7 @@ export function CommitActions({
   const canReact = isApproved || isOwn;
   const showsReplies = repliesOpen || (withReplies && !hasThread && commit.replies_count > 0);
   const toggleReplies = () => ((expandable && handlers.onToggleReplies) || handlers.onOpen)?.(commit);
-  const iconSize = compact ? 14 : 16;
+  const iconSize = compact ? 16 : 18;
   const labelStyle = compact ? styles.compactLabel : undefined;
 
   const more = () => {
@@ -98,52 +122,55 @@ export function CommitActions({
   return (
     <View style={styles.row}>
       {canReact && (
-        <Pressable onPress={() => handlers.onStar?.(commit)} style={styles.action} accessibilityRole="button" accessibilityLabel={commit.starred ? 'Unstar commit' : 'Star commit'}>
+        <Action onPress={() => handlers.onStar?.(commit)} label={commit.starred ? 'Unstar commit' : 'Star commit'}>
           <Star size={iconSize} color={commit.starred ? theme.primary : theme.inkMuted} fill={commit.starred ? theme.primary : 'transparent'} strokeWidth={2} />
           {commit.stars_count > 0 && (
             <Text variant="mono" color={commit.starred ? theme.primary : theme.inkMuted} style={labelStyle}>{commit.stars_count}</Text>
           )}
-        </Pressable>
+        </Action>
       )}
 
       {pasteis !== null && (
-        <Pressable onPress={canGivePastel ? () => handlers.onPastel?.(commit) : undefined} disabled={!canGivePastel} style={styles.action} accessibilityRole="button" accessibilityLabel={canGivePastel ? `Give a pastel, ${pastelCount} given, ${pasteis} left today` : `${pastelCount} pastéis`}>
+        <Action onPress={canGivePastel ? () => handlers.onPastel?.(commit) : undefined} label={canGivePastel ? `Give a pastel, ${pastelCount} given, ${pasteis} left today` : `${pastelCount} pastéis`}>
           <Image source={require('../assets/images/pastel-de-nata.png')} style={{ width: compact ? 18 : 20, height: compact ? 18 : 20 }} contentFit="contain" />
           <Text variant="mono" muted style={labelStyle}>{pastelCount}</Text>
-        </Pressable>
+        </Action>
       )}
 
       {withQuote && canReact && (
-        <Pressable onPress={() => handlers.onQuote?.(commit)} style={[styles.action, styles.centered]} accessibilityRole="button" accessibilityLabel="Quote">
+        <Action onPress={() => handlers.onQuote?.(commit)} label="Quote" centered>
           <Quote size={iconSize} color={theme.inkMuted} strokeWidth={2} />
-        </Pressable>
+        </Action>
       )}
 
-      <Pressable onPress={() => handlers.onReply?.(commit)} style={[styles.action, showsReplies && styles.centered]} accessibilityRole="button" accessibilityLabel="Reply">
+      <Action onPress={() => handlers.onReply?.(commit)} label="Reply" centered={showsReplies}>
         <MessageSquareReply size={iconSize} color={theme.inkMuted} strokeWidth={2} />
         {!showsReplies && <Text variant="small" muted style={[styles.label, labelStyle]}>Reply</Text>}
-      </Pressable>
+      </Action>
 
       {showsReplies && (
-        <Pressable onPress={toggleReplies} style={styles.action} accessibilityRole="button" accessibilityLabel={repliesOpen ? 'Hide replies' : count(commit.replies_count, 'reply', 'replies')}>
-          {repliesOpen ? <ChevronDown size={14} color={theme.primary} strokeWidth={2} /> : <ChevronRight size={14} color={theme.primary} strokeWidth={2} />}
+        <Action onPress={toggleReplies} label={repliesOpen ? 'Hide replies' : count(commit.replies_count, 'reply', 'replies')}>
+          {repliesOpen ? <ChevronDown size={16} color={theme.primary} strokeWidth={2} /> : <ChevronRight size={16} color={theme.primary} strokeWidth={2} />}
           <Text variant="small" color={theme.primary} style={[styles.label, labelStyle]}>{repliesOpen ? 'Hide replies' : count(commit.replies_count, 'reply', 'replies')}</Text>
-        </Pressable>
+        </Action>
       )}
 
       <View style={styles.spacer} />
 
-      <Pressable onPress={more} style={[styles.action, styles.centered]} accessibilityRole="button" accessibilityLabel="More">
+      <Action onPress={more} label="More" centered>
         <Ellipsis size={iconSize} color={theme.inkMuted} strokeWidth={2} />
-      </Pressable>
+      </Action>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', marginLeft: -8, marginVertical: -6 },
-  action: { flexDirection: 'row', alignItems: 'center', minWidth: 44, height: 36, paddingHorizontal: 8, gap: 5 },
+  // Pulled left so the first icon lines up with the text above, and up into
+  // the gap so the row reads as tight as before while the targets stay 44pt.
+  row: { flexDirection: 'row', alignItems: 'center', marginLeft: -12, marginTop: -8, marginBottom: -6, gap: 4 },
+  action: { flexDirection: 'row', alignItems: 'center', minWidth: 48, height: ActionHeight, paddingHorizontal: 12, gap: 6, borderRadius: 22 },
   centered: { justifyContent: 'center' },
+  pressed: { opacity: 0.45 },
   label: { fontSize: 13, lineHeight: 18 },
   compactLabel: { fontSize: 12, lineHeight: 16 },
   spacer: { flex: 1 },

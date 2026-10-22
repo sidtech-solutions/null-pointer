@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import type { CommitHandlers } from '@/components/commit-actions';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
@@ -12,6 +13,15 @@ import { toast } from '@/lib/toast';
 import type { Commit } from '@/lib/types';
 
 import { useAccount } from './account';
+
+/** A light tick under the thumb, so a star or vote feels taken before the request answers. */
+function tap(): void {
+  if (Platform.OS === 'web') {
+    return;
+  }
+
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+}
 
 // Stars are optimistic with rollback on error. Every write patches all cached copies of the commit.
 export function useCommitHandlers(): CommitHandlers {
@@ -48,6 +58,24 @@ export function useCommitHandlers(): CommitHandlers {
     onError: failed,
   });
 
+  const vote = useMutation({
+    mutationFn: ({ commit, optionId }: { commit: Commit; optionId: string }) => api.votePoll(commit.id, optionId),
+    onMutate: ({ commit, optionId }) => {
+      patchCommit(queryClient, commit.id, (c) =>
+        c.poll ? { ...c, poll: { ...c.poll, has_voted: true, votes_count: (c.poll.votes_count ?? 0) + 1, options: c.poll.options.map((option) => (option.id === optionId ? { ...option, voted: true, votes_count: (option.votes_count ?? 0) + 1 } : option)) } } : c,
+      );
+    },
+    onSuccess: (updated) => {
+      if (updated?.id) {
+        patchCommit(queryClient, updated.id, (c) => ({ ...c, poll: updated.poll ?? c.poll }));
+      }
+    },
+    onError: (error, { commit }) => {
+      patchCommit(queryClient, commit.id, (c) => ({ ...c, poll: commit.poll }));
+      failed(error);
+    },
+  });
+
   const pastel = useMutation({
     mutationFn: (commit: Commit) => api.givePastel(commit.id),
     onMutate: (commit) => {
@@ -78,7 +106,14 @@ export function useCommitHandlers(): CommitHandlers {
 
   return useMemo<CommitHandlers>(
     () => ({
-      onStar: (commit) => star.mutate(commit),
+      onStar: (commit) => {
+        tap();
+        star.mutate(commit);
+      },
+      onVote: (commit, optionId) => {
+        tap();
+        vote.mutate({ commit, optionId });
+      },
       onDelete: (commit) => remove.mutate(commit),
       onOpen: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } }),
       onReply: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id, reply: '1' } }),
@@ -86,6 +121,8 @@ export function useCommitHandlers(): CommitHandlers {
       onOpenAuthor: (user) => router.push({ pathname: '/users/[username]', params: { username: user.username } }),
       onReport: (commit) => reportCommit(commit),
       onPastel: (commit) => {
+        tap();
+
         if (pasteisLeft === 0) {
           toast('you ran out of pastéis. wait until tomorrow.');
 

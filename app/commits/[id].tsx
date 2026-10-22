@@ -1,12 +1,13 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, ImagePlus, Trash2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitRow } from '@/components/commit-row';
-import { BodyCounter, StashLabel } from '@/components/composer';
+import { AttachmentStrip, BodyCounter, chooseImageSource, StashLabel, ToolbarButton, toUploads, useAttachments } from '@/components/composer';
+import { MaxImages } from '@/lib/images';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
 import { Text } from '@/components/text';
@@ -15,7 +16,8 @@ import { Fonts, laneColor, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError, nextCursor, Unauthenticated } from '@/lib/client';
 import { findCachedCommit, patchCommit } from '@/lib/commit-cache';
-import { fits, MaxLength, shortHash } from '@/lib/display';
+import { fits, length, MaxLength, shortHash } from '@/lib/display';
+import { useKeyboardShown } from '@/lib/keyboard';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { threadRows } from '@/lib/timeline';
 import type { Commit, Page } from '@/lib/types';
@@ -33,6 +35,8 @@ export default function CommitScreen() {
   const [restored, setRestored] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const attachments = useAttachments();
+  const keyboardShown = useKeyboardShown();
 
   const thread = useQuery({
     queryKey: ['commit', id],
@@ -74,12 +78,17 @@ export default function CommitScreen() {
   }, [thread.error, replies.error, account, router]);
 
   const send = useMutation({
-    mutationFn: () => api.createCommit(reply.trim(), id),
+    mutationFn: async () => {
+      const { uploads, descriptions } = await toUploads(attachments.images);
+
+      return api.createCommit(reply.trim(), { parentId: id, images: uploads, descriptions });
+    },
     onSuccess: async (created) => {
       await dropStash(account.user?.id, `reply-${id}`);
       setReply('');
       setRestored(false);
       setError(null);
+      attachments.clear();
       queryClient.setQueryData<{ pages: Page<Commit>[]; pageParams: unknown[] }>(['replies', id], (data) =>
         data && data.pages.length > 0 ? { ...data, pages: [...data.pages.slice(0, -1), { ...data.pages[data.pages.length - 1], data: [...data.pages[data.pages.length - 1].data, created] }] } : { pages: [{ data: [created] }], pageParams: [null] },
       );
@@ -87,7 +96,7 @@ export default function CommitScreen() {
       queryClient.invalidateQueries({ queryKey: ['replies', id] });
       queryClient.invalidateQueries({ queryKey: ['log'] });
     },
-    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : 'fatal: could not reply.'),
+    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not reply.'),
   });
 
   const commit = thread.data?.commit;
@@ -95,6 +104,8 @@ export default function CommitScreen() {
   const replyList = useMemo(() => replies.data?.pages.flatMap((page) => page.data) ?? [], [replies.data]);
   const isOwn = commit !== undefined && account.user !== null && String(commit.author?.id) === String(account.user.id);
   const accent = account.user ? laneColor(theme, account.user.lane) : theme.primary;
+  const hasImages = attachments.images.length > 0;
+  const canSend = (hasImages && reply.trim() === '' ? true : fits(reply)) && length(reply) <= MaxLength && !send.isPending;
 
   const confirmDelete = () =>
     Alert.alert('Delete this commit?', "There's no undo.", [
@@ -112,7 +123,7 @@ export default function CommitScreen() {
     ]);
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.screen, { backgroundColor: theme.surface }]}>
+    <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface }]}>
       <Header
         title={
           <View style={styles.titleRow}>
@@ -200,9 +211,11 @@ export default function CommitScreen() {
       </ScrollView>
 
       {commit && (
-        <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
           {error && <Text variant="mono" color={theme.destructive} style={styles.error}>{error}</Text>}
+          <AttachmentStrip attachments={attachments} compact />
           <View style={styles.replyRow}>
+            <ToolbarButton icon={ImagePlus} label={hasImages && attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per reply` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={attachments.picking || attachments.images.length >= MaxImages || send.isPending} />
             <TextInput
               value={reply}
               onChangeText={(text) => {
@@ -211,7 +224,7 @@ export default function CommitScreen() {
                   setRestored(false);
                 }
               }}
-              placeholder={`Reply to @${commit.author?.username ?? ''}`}
+              placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.username ?? ''}`}
               placeholderTextColor={theme.inkMuted}
               selectionColor={theme.primary}
               multiline
@@ -220,8 +233,8 @@ export default function CommitScreen() {
               style={[styles.replyInput, { color: theme.ink, backgroundColor: theme.wash }]}
             />
             <BodyCounter body={reply} />
-            <Pressable onPress={() => send.mutate()} disabled={!fits(reply) || send.isPending} style={[styles.send, { backgroundColor: accent, opacity: fits(reply) && !send.isPending ? 1 : 0.5 }]} accessibilityRole="button">
-              <Text variant="label" color={theme.primaryInk}>Reply</Text>
+            <Pressable onPress={() => send.mutate()} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend || send.isPending ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canSend, busy: send.isPending }}>
+              {send.isPending ? <ActivityIndicator size="small" color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Reply</Text>}
             </Pressable>
           </View>
           {restored && (
@@ -250,10 +263,10 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 64, alignItems: 'center' },
   loadingReplies: { paddingLeft: Space.rail, paddingVertical: 16 },
   noReplies: { paddingLeft: Space.rail, paddingRight: Space.gutter, paddingVertical: 16 },
-  replyBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter, paddingTop: 8, gap: 6 },
-  replyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  replyBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter, paddingTop: 8, gap: 8 },
+  replyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
   replyInput: { flex: 1, fontFamily: Fonts.sans, fontSize: 15, lineHeight: 20, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, maxHeight: 120 },
-  send: { height: 32, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  send: { height: 36, minWidth: 64, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   stash: { paddingLeft: 4 },
   error: { fontSize: 12, lineHeight: 16 },
 });

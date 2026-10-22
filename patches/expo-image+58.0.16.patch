@@ -1,0 +1,150 @@
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/ExpoImageAppGlideModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/ExpoImageAppGlideModule.kt
+index 39de154..5d9c196 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/ExpoImageAppGlideModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/ExpoImageAppGlideModule.kt
+@@ -11,6 +11,13 @@ import com.bumptech.glide.load.resource.gif.ByteBufferGifDecoder
+ import com.bumptech.glide.load.resource.gif.GifDrawable
+ import com.bumptech.glide.load.resource.gif.StreamGifDecoder
+ import com.bumptech.glide.module.AppGlideModule
++import com.bumptech.glide.module.LibraryGlideModule
++import expo.modules.image.blurhash.BlurhashModule
++import expo.modules.image.dataurls.Base64Module
++import expo.modules.image.decodedsource.DecodedModule
++import expo.modules.image.okhttp.ExpoImageOkHttpClientGlideModule
++import expo.modules.image.svg.SVGModule
++import expo.modules.image.thumbhash.ThumbhashModule
+ import java.io.InputStream
+ import java.nio.ByteBuffer
+ 
+@@ -20,6 +27,15 @@ import java.nio.ByteBuffer
+  */
+ @GlideModule
+ class ExpoImageAppGlideModule : AppGlideModule() {
++  private val libraryModules: List<LibraryGlideModule> = listOf(
++    BlurhashModule(),
++    Base64Module(),
++    DecodedModule(),
++    ExpoImageOkHttpClientGlideModule(),
++    SVGModule(),
++    ThumbhashModule()
++  )
++
+   override fun applyOptions(context: Context, builder: GlideBuilder) {
+     super.applyOptions(context, builder)
+ 
+@@ -39,6 +55,14 @@ class ExpoImageAppGlideModule : AppGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)
+ 
++    // Registered here, in a fixed order, instead of through @GlideModule: Glide's
++    // KSP processor emits LibraryGlideModules in source-file discovery order,
++    // which depends on the build machine's filesystem and makes the generated
++    // GeneratedAppGlideModuleImpl (and so classes.dex) non-reproducible.
++    for (module in libraryModules) {
++      module.registerComponents(context, glide, registry)
++    }
++
+     // APNG4Android's GIF decoder can crash on small interlaced frames. Prepending
+     // Glide's decoders keeps GIFs animated without routing them through that decoder.
+     val parsers = registry.imageHeaderParsers
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/blurhash/BlurhashModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/blurhash/BlurhashModule.kt
+index 980ef35..bddf1fa 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/blurhash/BlurhashModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/blurhash/BlurhashModule.kt
+@@ -4,10 +4,8 @@ import android.content.Context
+ import android.graphics.Bitmap
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.module.LibraryGlideModule
+ 
+-@GlideModule
+ class BlurhashModule : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/dataurls/Base64Module.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/dataurls/Base64Module.kt
+index d363af1..b2dd007 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/dataurls/Base64Module.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/dataurls/Base64Module.kt
+@@ -3,11 +3,9 @@ package expo.modules.image.dataurls
+ import android.content.Context
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.module.LibraryGlideModule
+ import java.nio.ByteBuffer
+ 
+-@GlideModule
+ class Base64Module : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/decodedsource/DecodedModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/decodedsource/DecodedModule.kt
+index eb22a0f..e32b23e 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/decodedsource/DecodedModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/decodedsource/DecodedModule.kt
+@@ -4,10 +4,8 @@ import android.content.Context
+ import android.graphics.drawable.Drawable
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.module.LibraryGlideModule
+ 
+-@GlideModule
+ class DecodedModule : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/okhttp/ExpoImageOkHttpClientGlideModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/okhttp/ExpoImageOkHttpClientGlideModule.kt
+index aded0c8..048d1cb 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/okhttp/ExpoImageOkHttpClientGlideModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/okhttp/ExpoImageOkHttpClientGlideModule.kt
+@@ -3,7 +3,6 @@ package expo.modules.image.okhttp
+ import android.content.Context
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.integration.okhttp3.OkHttpUrlLoader
+ import com.bumptech.glide.load.model.GlideUrl
+ import com.bumptech.glide.load.model.Headers
+@@ -74,7 +73,6 @@ data class GlideUrlWrapper(val glideUrl: GlideUrl) {
+   }
+ }
+ 
+-@GlideModule
+ class ExpoImageOkHttpClientGlideModule : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     val client = OkHttpClientProvider.createClient()
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/svg/SVGModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/svg/SVGModule.kt
+index b111e19..2727040 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/svg/SVGModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/svg/SVGModule.kt
+@@ -4,7 +4,6 @@ import android.content.Context
+ import android.graphics.drawable.Drawable
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.module.LibraryGlideModule
+ import com.caverock.androidsvg.SVG
+ import java.io.InputStream
+@@ -16,7 +15,6 @@ import java.nio.ByteBuffer
+  * Copied from https://github.com/bumptech/glide/blob/10acc31a16b4c1b5684f69e8de3117371dfa77a8/samples/svg/src/main/java/com/bumptech/glide/samples/svg/SvgModule.java
+  * and rewritten to Kotlin.
+  */
+-@GlideModule
+ class SVGModule : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)
+diff --git a/node_modules/expo-image/android/src/main/java/expo/modules/image/thumbhash/ThumbhashModule.kt b/node_modules/expo-image/android/src/main/java/expo/modules/image/thumbhash/ThumbhashModule.kt
+index e22ac36..4497695 100644
+--- a/node_modules/expo-image/android/src/main/java/expo/modules/image/thumbhash/ThumbhashModule.kt
++++ b/node_modules/expo-image/android/src/main/java/expo/modules/image/thumbhash/ThumbhashModule.kt
+@@ -4,10 +4,8 @@ import android.content.Context
+ import android.graphics.Bitmap
+ import com.bumptech.glide.Glide
+ import com.bumptech.glide.Registry
+-import com.bumptech.glide.annotation.GlideModule
+ import com.bumptech.glide.module.LibraryGlideModule
+ 
+-@GlideModule
+ class ThumbhashModule : LibraryGlideModule() {
+   override fun registerComponents(context: Context, glide: Glide, registry: Registry) {
+     super.registerComponents(context, glide, registry)

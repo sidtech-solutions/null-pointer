@@ -2,7 +2,7 @@
   "expo": {
     "name": "null-pointer",
     "slug": "null-pointer",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "devnull",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.siddarthkay.nullpointer",
-      "versionCode": 2,
+      "versionCode": 3,
       "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#f6f7f8",
@@ -42,6 +42,7 @@
       "expo-web-browser",
       "./plugins/with-unsigned-release",
       "./plugins/with-gradle-wrapper-timeout",
+      "./plugins/with-reproducible-build",
       [
         "expo-splash-screen",
         {

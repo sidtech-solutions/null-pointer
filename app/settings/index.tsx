@@ -11,11 +11,13 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { RailDot } from '@/components/graph-rail';
 import { Header } from '@/components/header';
+import { HslSlider } from '@/components/hsl-slider';
 import { SettingsHeading } from '@/components/settings-heading';
 import { Text } from '@/components/text';
 import { Fonts, LaneCount, laneColor, Radius, setThemePreference, Space, type ThemePreference, themePreference, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError, baseUrl } from '@/lib/client';
+import { hexToHsl, type Hsl, hslToHex, isHex } from '@/lib/color';
 import { relativeTime } from '@/lib/display';
 import { existingKey, forgetKey } from '@/lib/device-key';
 import { useNow } from '@/lib/now';
@@ -143,7 +145,15 @@ export default function SettingsScreen() {
 
   const user = me.data?.user ?? account.user;
   const deviceName = `devnull on ${Device.modelName ?? 'this phone'}`;
-  const customHex = /^#[0-9a-f]{6}$/i.test(custom) ? custom.toLowerCase() : null;
+  const customHex = isHex(custom) ? custom.toLowerCase() : null;
+  // The mixer starts from the custom colour being typed, else the one saved, else the lane showing.
+  const mixed: Hsl = hexToHsl(customHex ?? (typeof current === 'string' ? current : previewColor)) ?? { h: 20, s: 0.8, l: 0.5 };
+  const mix = (change: Partial<Hsl>) => {
+    const hex = hslToHex({ ...mixed, ...change });
+    setCustom(hex);
+    setChosen(hex);
+  };
+  const hueStops = Array.from({ length: 13 }, (_, step) => hslToHex({ h: step * 30, s: Math.max(mixed.s, 0.5), l: 0.5 }));
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.shell }]}>
@@ -212,6 +222,11 @@ export default function SettingsScreen() {
               style={[styles.customInput, { color: theme.ink, borderColor: theme.rail, backgroundColor: theme.surface }]}
               accessibilityLabel="Custom color"
             />
+          </View>
+          <View style={styles.mixer}>
+            <HslSlider label="hue" value={mixed.h / 360} stops={hueStops} onChange={(value) => mix({ h: value * 360 })} />
+            <HslSlider label="saturation" value={mixed.s} stops={[hslToHex({ ...mixed, s: 0 }), hslToHex({ ...mixed, s: 1 })]} onChange={(value) => mix({ s: value })} />
+            <HslSlider label="lightness" value={mixed.l} stops={['#000000', hslToHex({ ...mixed, l: 0.5 }), '#ffffff']} onChange={(value) => mix({ l: value })} />
           </View>
           <Button title="Save color" disabled={!changed} busy={saveLane.isPending} onPress={() => saveLane.mutate()} style={[styles.save, changed && { backgroundColor: previewColor }]} />
         </Section>
@@ -369,6 +384,7 @@ const styles = StyleSheet.create({
   swatchDisc: { width: 28, height: 28, borderRadius: Radius.full },
   swatchLabel: { fontSize: 12, lineHeight: 16 },
   customRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mixer: { gap: 10, paddingTop: 4 },
   customSwatch: { width: 32, height: 32, borderRadius: Radius.full, borderWidth: 2 },
   customInput: { flex: 1, height: 36, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 10, fontFamily: Fonts.mono, fontSize: 13 },
   save: { alignSelf: 'flex-start' },

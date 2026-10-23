@@ -98,6 +98,10 @@ export default function Onboarding() {
 
         <Button title={error ? 'Try again' : 'Sign in with GitHub'} onPress={signIn} busy={busy} disabled={key === null} size="lg" />
 
+        <Text variant="small" muted style={styles.how}>
+          This opens dev-null.sh in your browser. Sign in with GitHub there if you aren’t already, then approve this phone’s key. No password is ever typed into the app.
+        </Text>
+
         <Text variant="mono" muted style={styles.fingerprint} numberOfLines={1}>
           {key ? key.fingerprint() : 'generating this phone’s key…'}
         </Text>
@@ -112,5 +116,6 @@ const styles = StyleSheet.create({
   tagline: { textAlign: 'center', maxWidth: 280 },
   footer: { gap: 16 },
   fatal: { textAlign: 'center' },
+  how: { textAlign: 'center' },
   fingerprint: { textAlign: 'center', fontSize: 11 },
 });

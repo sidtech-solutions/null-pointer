@@ -295,6 +295,34 @@ export const api = {
    * people the user follows; replies and quotes put the thread's people first.
    * The route is new on devnull; an older server answers 404.
    */
+  /**
+   * People by name or handle, from the web's public search: the signed API has
+   * none yet. Unsigned, so mutes and blocks are not applied.
+   */
+  async searchUsers(term: string): Promise<User[]> {
+    const query = term.trim().slice(0, 100);
+
+    if (query === '') {
+      return [];
+    }
+
+    let response: Response;
+
+    try {
+      response = await fetch(`${baseUrl()}/search/users?q=${encode(query)}`, { headers: { Accept: 'application/json' } });
+    } catch {
+      throw ApiError.couldNotConnect(baseUrl());
+    }
+
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+
+    const users = (await response.json())?.users;
+
+    return Array.isArray(users) ? users.filter((user): user is User => user && typeof user.username === 'string') : [];
+  },
+
   async mentionSuggestions(term: string, context: { reply?: string | null; quote?: string | null } = {}): Promise<User[]> {
     const json = await send('GET', 'search/mentions', { q: term, reply: context.reply ?? null, quote: context.quote ?? null });
 

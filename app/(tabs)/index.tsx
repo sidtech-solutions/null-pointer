@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import { SquarePen } from 'lucide-react-native';
+import { Search, SquarePen } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
@@ -52,9 +52,14 @@ export default function LogScreen() {
         onChange={(key) => pager.current?.setPage(Logs.findIndex((log) => log.key === key))}
         accent={accent}
         right={
-          <Pressable onPress={() => router.push('/compose')} hitSlop={8} accessibilityRole="button" accessibilityLabel="New commit">
-            <SquarePen size={22} color={theme.ink} strokeWidth={2} />
-          </Pressable>
+          <View style={styles.actions}>
+            <Pressable onPress={() => router.push('/search')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Find a developer">
+              <Search size={22} color={theme.ink} strokeWidth={2} />
+            </Pressable>
+            <Pressable onPress={() => router.push('/compose')} hitSlop={8} accessibilityRole="button" accessibilityLabel="New commit">
+              <SquarePen size={22} color={theme.ink} strokeWidth={2} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -78,6 +83,7 @@ export default function LogScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   pager: { flex: 1 },
   page: { flex: 1 },
 });

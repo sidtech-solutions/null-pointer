@@ -83,6 +83,7 @@ function RootLayoutNav() {
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/safety" />
         <Stack.Screen name="starred" />
+        <Stack.Screen name="search" />
         <Stack.Screen name="image" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ReportSheet commit={reporting} onClose={() => reportCommit(null)} />

@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -15,7 +15,7 @@ import { useAccount } from '@/lib/account';
 import { api, nextCursor, Unauthenticated } from '@/lib/client';
 import { dayKey, dayLabel } from '@/lib/display';
 import { useNow } from '@/lib/now';
-import type { Notification } from '@/lib/types';
+import type { CurrentUser, Notification } from '@/lib/types';
 
 const Types: { key: string; label: string; empty: string }[] = [
   { key: 'all', label: 'All', empty: 'Nothing here yet. Follows, stars, replies, quotes, mentions, and moderation updates for your commits will show up here.' },
@@ -37,26 +37,40 @@ export default function NotificationsScreen() {
   const account = useAccount();
   const queryClient = useQueryClient();
   const now = useNow();
+  const focused = useIsFocused();
   const [type, setType] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<Record<string, Group | null>>({});
-  // Listing marks everything read on devnull, so "new" is judged against the time each filter was first loaded here.
-  const readAt = useRef<Record<string, number>>({});
+  // Listing marks everything read on devnull, so "new" is judged against the previous load of each filter here.
+  const seen = useRef<Record<string, { since: number; latest: number; updatedAt: number; pages: number }>>({});
 
   const query = useInfiniteQuery({
     queryKey: ['notifications', type],
     queryFn: ({ pageParam }) => api.notifications(type, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => nextCursor(last),
-    enabled: account.status === 'signed-in',
+    // Only while the tab is showing: a background refetch would mark everything read unseen.
+    enabled: account.status === 'signed-in' && focused,
   });
 
+  // Every listing, not only the first, marks everything read on the server, so
+  // the badge drops at once. Loading older pages is not a new visit.
   useEffect(() => {
-    if (query.isSuccess) {
-      readAt.current[type] ??= Date.now();
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+    const updatedAt = query.dataUpdatedAt;
+    const pages = query.data?.pages.length ?? 0;
+    const previous = seen.current[type];
+
+    if (updatedAt === 0 || previous?.updatedAt === updatedAt) {
+      return;
     }
-  }, [query.isSuccess, type, queryClient]);
+
+    const paged = previous !== undefined && pages > previous.pages;
+    seen.current[type] = paged ? { ...previous, updatedAt, pages } : { since: previous?.latest ?? updatedAt, latest: updatedAt, updatedAt, pages };
+
+    if (query.isFetchedAfterMount) {
+      queryClient.setQueryData(['me'], (me: CurrentUser | undefined) => (me && me.unread_notifications_count !== 0 ? { ...me, unread_notifications_count: 0 } : me));
+    }
+  }, [query.dataUpdatedAt, query.data, query.isFetchedAfterMount, type, queryClient]);
 
   useEffect(() => {
     if (query.error instanceof Unauthenticated) {
@@ -88,7 +102,7 @@ export default function NotificationsScreen() {
 
   const isNew = useCallback(
     (notification: Notification): boolean => {
-      const since = readAt.current[type];
+      const since = seen.current[type]?.since;
 
       if (since === undefined) {
         return false;

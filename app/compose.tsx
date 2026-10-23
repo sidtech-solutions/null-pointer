@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Sc
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitBody } from '@/components/commit-body';
+import { MentionSuggestions } from '@/components/mention-suggestions';
 import { AttachmentStrip, BodyCounter, ComposerInput, ComposerToolbar, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
 import { laneColor, Space, useTheme } from '@/constants/theme';
@@ -13,9 +14,10 @@ import { api, ApiError } from '@/lib/client';
 import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
+import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
-import type { NewPoll } from '@/lib/types';
+import type { NewPoll, User } from '@/lib/types';
 
 export default function ComposeScreen() {
   const theme = useTheme();
@@ -32,6 +34,30 @@ export default function ComposeScreen() {
   const [poll, setPoll] = useState<NewPoll | null>(null);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
+  const [caret, setCaret] = useState(0);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const mention = mentionBeforeCaret(body, caret);
+  const suggestions = useMentionSuggestions(mention, { quote });
+
+  // The caret is placed once after a pick, then the input is left to itself again.
+  useEffect(() => {
+    if (selection) {
+      const timer = setTimeout(() => setSelection(undefined), 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selection]);
+
+  const pickMention = (user: User) => {
+    if (!mention) {
+      return;
+    }
+
+    const next = insertMention(body, mention, user.username);
+    setBody(next.text);
+    setCaret(next.caret);
+    setSelection({ start: next.caret, end: next.caret });
+  };
 
   const quoted = useQuery({
     queryKey: ['commit', quote],
@@ -130,6 +156,8 @@ export default function ComposeScreen() {
               setRestored(false);
             }
           }}
+          onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+          selection={selection}
           placeholder={quote ? 'Add your take' : poll ? 'Ask a question' : hasImages ? 'Say something about it (optional)' : 'What did you ship?'}
           autoFocus
           editable={!busy}
@@ -151,6 +179,8 @@ export default function ComposeScreen() {
           </View>
         )}
       </ScrollView>
+
+      <MentionSuggestions users={suggestions} onPick={pickMention} />
 
       <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
         <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote}>

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitRow } from '@/components/commit-row';
 import { AttachmentStrip, BodyCounter, chooseImageSource, StashLabel, ToolbarButton, toUploads, useAttachments } from '@/components/composer';
+import { MentionSuggestions } from '@/components/mention-suggestions';
 import { MaxImages } from '@/lib/images';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
@@ -18,9 +19,10 @@ import { api, ApiError, nextCursor, Unauthenticated } from '@/lib/client';
 import { findCachedCommit, patchCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
+import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { threadRows } from '@/lib/timeline';
-import type { Commit, Page } from '@/lib/types';
+import type { Commit, Page, User } from '@/lib/types';
 import { useCommitHandlers } from '@/lib/use-commit-handlers';
 
 export default function CommitScreen() {
@@ -37,6 +39,29 @@ export default function CommitScreen() {
   const [error, setError] = useState<string | null>(null);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
+  const [caret, setCaret] = useState(0);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const mention = mentionBeforeCaret(reply, caret);
+  const suggestions = useMentionSuggestions(mention, { reply: id });
+
+  useEffect(() => {
+    if (selection) {
+      const timer = setTimeout(() => setSelection(undefined), 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selection]);
+
+  const pickMention = (user: User) => {
+    if (!mention) {
+      return;
+    }
+
+    const next = insertMention(reply, mention, user.username);
+    setReply(next.text);
+    setCaret(next.caret);
+    setSelection({ start: next.caret, end: next.caret });
+  };
 
   const thread = useQuery({
     queryKey: ['commit', id],
@@ -212,6 +237,7 @@ export default function CommitScreen() {
 
       {commit && (
         <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
+          <MentionSuggestions users={suggestions} onPick={pickMention} />
           {error && <Text variant="mono" color={theme.destructive} style={styles.error}>{error}</Text>}
           <AttachmentStrip attachments={attachments} compact />
           <View style={styles.replyRow}>
@@ -224,6 +250,8 @@ export default function CommitScreen() {
                   setRestored(false);
                 }
               }}
+              onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+              selection={selection}
               placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.username ?? ''}`}
               placeholderTextColor={theme.inkMuted}
               selectionColor={theme.primary}

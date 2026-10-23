@@ -12,6 +12,7 @@ import { AttachmentStrip, chooseImageSource, ToolbarButton, useAttachments } fro
 import { OrgAvatar } from '@/components/conversation-row';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
+import { MentionSuggestions } from '@/components/mention-suggestions';
 import { MessageActions } from '@/components/message-actions';
 import { EventLine, MessageBubble, PendingBubble, ReplyGhost } from '@/components/message-bubble';
 import { Text } from '@/components/text';
@@ -22,6 +23,7 @@ import { dayKey, dayLabel } from '@/lib/display';
 import { tap } from '@/lib/haptics';
 import { MaxImages } from '@/lib/images';
 import { useKeyboardShown } from '@/lib/keyboard';
+import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
 import { useNow } from '@/lib/now';
 import { accessNotice, isMine, orgTitle, quickReactions, targetFromParam, targetKey, typingText } from '@/lib/remotes';
 import { bumpRemotesUnread, removeFromInbox } from '@/lib/remotes-cache';
@@ -65,6 +67,16 @@ export default function ThreadScreen() {
   const [replyTo, setReplyTo] = useState<MessageReply | null>(null);
   const [acting, setActing] = useState<Message | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+
+  useEffect(() => {
+    if (selection) {
+      const timer = setTimeout(() => setSelection(undefined), 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [selection]);
 
   useEffect(() => {
     if (thread.error instanceof Unauthenticated) {
@@ -80,6 +92,22 @@ export default function ThreadScreen() {
   const title = data ? (data.kind === 'direct' ? data.partner.name || `@${data.partner.username}` : orgTitle(data.org.name, data.members, me)) : target.kind === 'direct' ? `@${target.username}` : 'Org';
   const subtitle = data?.kind === 'direct' ? `@${data.partner.username}` : data?.kind === 'org' ? `${data.members.length} ${data.members.length === 1 ? 'member' : 'members'}` : '';
   const typing = data ? (data.kind === 'org' ? typingText(data.typing) : data.partner_typing ? `@${data.partner.username} is typing…` : null) : null;
+
+  // An org suggests its members; a direct thread only the partner.
+  const mentionable = useMemo(() => (data?.kind === 'org' ? data.members.map((member) => member.user) : partner ? [partner] : []), [data, partner]);
+  const mention = mentionBeforeCaret(body, caret);
+  const suggestions = useMentionSuggestions(mention, { members: mentionable });
+
+  const pickMention = (user: User) => {
+    if (!mention) {
+      return;
+    }
+
+    const next = insertMention(body, mention, user.username);
+    setBody(next.text);
+    setCaret(next.caret);
+    setSelection({ start: next.caret, end: next.caret });
+  };
 
   const authors = useMemo(() => {
     const map = new Map<string, User>();
@@ -368,6 +396,8 @@ export default function ThreadScreen() {
         }
       />
 
+      <MentionSuggestions users={suggestions} onPick={pickMention} />
+
       <View style={[styles.bottom, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
         {typing && <Text variant="mono" muted style={styles.typing}>{typing}</Text>}
 
@@ -398,6 +428,8 @@ export default function ThreadScreen() {
               <TextInput
                 value={body}
                 onChangeText={change}
+                onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+                selection={selection}
                 placeholder={partner ? `Push to @${partner.username}` : 'Push to the org'}
                 placeholderTextColor={theme.inkMuted}
                 multiline

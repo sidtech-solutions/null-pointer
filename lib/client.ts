@@ -285,6 +285,17 @@ export const api = {
     return Array.isArray(json.reactions) ? json.reactions : [];
   },
 
+  /**
+   * People to mention, as the web's composer suggests them: with no term, the
+   * people the user follows; replies and quotes put the thread's people first.
+   * The route is new on devnull; an older server answers 404.
+   */
+  async mentionSuggestions(term: string, context: { reply?: string | null; quote?: string | null } = {}): Promise<User[]> {
+    const json = await send('GET', 'search/mentions', { q: term, reply: context.reply ?? null, quote: context.quote ?? null });
+
+    return Array.isArray(json.users) ? json.users : Array.isArray(json.data) ? json.data : [];
+  },
+
   /** People to push to or add to an org, each with the reason they can't be picked, if any. */
   async remoteCandidates(term: string, options: { forOrg?: boolean; org?: string | null } = {}): Promise<Candidate[]> {
     const json = await send('GET', 'remotes/candidates', { q: term, org: options.org ?? null, for: options.forOrg ? 'org' : null });

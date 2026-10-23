@@ -13,6 +13,7 @@ const Alpha = ['00', '52', '8f', 'cc', 'ff'];
 /** How much the widget shows grows with the height the launcher gives it, in dp. */
 const MediumFrom = 150;
 const TallFrom = 230;
+const NarrowBelow = 300;
 
 function hex(color: string): `#${string}` {
   return (color.startsWith('#') ? color : '#000000') as `#${string}`;
@@ -47,8 +48,13 @@ export function StreakWidget({ data, dark, height = 0, width = 320 }: { data: Wi
     );
   }
 
+  // Narrow (three cells or fewer), the days go under the streak and the footer keeps only what is waiting.
+  const narrow = width < NarrowBelow;
+  const cell = narrow ? 14 : 16;
   const medium = height >= MediumFrom;
-  const tall = height >= TallFrom;
+  const tall = height >= TallFrom + (narrow ? 60 : 0);
+  // A narrow widget has less height to spare below the stacked header, so it lists two commits instead of three.
+  const latest = narrow ? data.latest.slice(0, 2) : data.latest;
   const waiting = [
     data.notifications > 0 ? `${data.notifications} new` : null,
     data.remotes > 0 ? plural(data.remotes, 'push', 'pushes') : null,
@@ -60,24 +66,24 @@ export function StreakWidget({ data, dark, height = 0, width = 320 }: { data: Wi
   return (
     <FlexWidget clickAction="OPEN_APP" style={{ width: 'match_parent', height: 'match_parent', backgroundColor: surface, borderRadius: 24, padding: 16, flexDirection: 'column', justifyContent: 'space-between' }}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
-        <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <FlexWidget style={{ width: 'match_parent', flexDirection: narrow ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <FlexWidget style={{ flexDirection: 'column' }}>
             <FlexWidget style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
               <TextWidget text={String(data.current)} style={{ fontFamily: Sans, fontSize: 36, color: lane, lineHeight: 38 }} />
               <TextWidget text=" day streak" style={{ fontFamily: Mono, fontSize: 12, color: muted, marginBottom: 6, marginLeft: 4 }} />
             </FlexWidget>
-            <TextWidget text={`longest ${data.longest} · ${plural(data.total, 'commit', 'commits')} this week`} style={{ fontFamily: Mono, fontSize: 11, color: muted, marginTop: 2 }} />
+            <TextWidget text={narrow ? `longest ${data.longest} · ${data.total} this week` : `longest ${data.longest} · ${plural(data.total, 'commit', 'commits')} this week`} style={{ fontFamily: Mono, fontSize: 11, color: muted, marginTop: 2 }} />
           </FlexWidget>
 
-          <FlexWidget style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
+          <FlexWidget style={{ flexDirection: 'column', alignItems: narrow ? 'flex-start' : 'flex-end', marginTop: narrow ? 8 : 0 }}>
             <FlexWidget style={{ flexDirection: 'row', flexGap: 3 }}>
               {data.days.map((day, index) => (
-                <FlexWidget key={index} style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: day.level === 0 ? wash : (`${lane}${Alpha[day.level] ?? 'ff'}` as `#${string}`) }} />
+                <FlexWidget key={index} style={{ width: cell, height: cell, borderRadius: 4, backgroundColor: day.level === 0 ? wash : (`${lane}${Alpha[day.level] ?? 'ff'}` as `#${string}`) }} />
               ))}
             </FlexWidget>
             <FlexWidget style={{ flexDirection: 'row', flexGap: 3, marginTop: 3 }}>
               {data.days.map((day, index) => (
-                <FlexWidget key={index} style={{ width: 16, alignItems: 'center' }}>
+                <FlexWidget key={index} style={{ width: cell, alignItems: 'center' }}>
                   <TextWidget text={day.weekday} style={{ fontFamily: Mono, fontSize: 9, color: muted }} />
                 </FlexWidget>
               ))}
@@ -94,20 +100,20 @@ export function StreakWidget({ data, dark, height = 0, width = 320 }: { data: Wi
             <FlexWidget style={{ width: 'match_parent', height: 5, borderRadius: 3, backgroundColor: wash, marginTop: 6, flexDirection: 'row' }}>
               <FlexWidget style={{ width: Math.max(4, Math.round((width - 32) * (data.progress ?? 1))), height: 5, borderRadius: 3, backgroundColor: lane }} />
             </FlexWidget>
-            <TextWidget text={`${plural(data.commits, 'commit', 'commits')} · ${data.following} following · ${plural(data.followers, 'follower', 'followers')}`} style={{ fontFamily: Mono, fontSize: 11, color: muted, marginTop: 6 }} />
+            <TextWidget text={narrow ? `${data.commits} commits · ${data.following} following · ${data.followers} followers` : `${plural(data.commits, 'commit', 'commits')} · ${data.following} following · ${plural(data.followers, 'follower', 'followers')}`} style={{ fontFamily: Mono, fontSize: narrow ? 10 : 11, color: muted, marginTop: 6 }} truncate="END" maxLines={1} />
           </FlexWidget>
         )}
 
-        {tall && data.latest.length > 0 && (
+        {tall && latest.length > 0 && (
           <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginTop: 12, borderTopWidth: 1, borderTopColor: hairline, paddingTop: 8 }}>
             <TextWidget text="$ git log --following" style={{ fontFamily: Mono, fontSize: 10, color: muted, marginBottom: 4 }} />
-            {data.latest.map((commit) => (
+            {latest.map((commit) => (
               <FlexWidget key={commit.id} clickAction="OPEN_URI" clickActionData={{ uri: `devnull://commits/${commit.id}` }} style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', paddingVertical: 3 }}>
                 <TextWidget text={`@${commit.username}`} style={{ fontFamily: Mono, fontSize: 11, color: ink }} truncate="END" maxLines={1} />
                 <FlexWidget style={{ flex: 1 }}>
                   <TextWidget text={`  ${commit.line}`} style={{ fontFamily: Mono, fontSize: 11, color: muted }} truncate="END" maxLines={1} />
                 </FlexWidget>
-                <TextWidget text={`  ${commit.ago}`} style={{ fontFamily: Mono, fontSize: 10, color: muted }} />
+                {!narrow && <TextWidget text={`  ${commit.ago}`} style={{ fontFamily: Mono, fontSize: 10, color: muted }} />}
               </FlexWidget>
             ))}
           </FlexWidget>
@@ -115,9 +121,11 @@ export function StreakWidget({ data, dark, height = 0, width = 320 }: { data: Wi
       </FlexWidget>
 
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        <TextWidget text={waiting || 'all caught up'} style={{ fontFamily: Mono, fontSize: 11, color: waiting ? ink : muted }} truncate="END" maxLines={1} />
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TextWidget text={`@${data.username} · `} style={{ fontFamily: Mono, fontSize: 11, color: muted }} />
+        <FlexWidget style={{ flex: 1 }}>
+          <TextWidget text={waiting || 'all caught up'} style={{ fontFamily: Mono, fontSize: 11, color: waiting ? ink : muted }} truncate="END" maxLines={1} />
+        </FlexWidget>
+        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+          {!narrow && <TextWidget text={`@${data.username} · `} style={{ fontFamily: Mono, fontSize: 11, color: muted }} />}
           <TextWidget text="/dev" style={{ fontFamily: Sans, fontSize: 12, color: ink }} />
           <TextWidget text="/" style={{ fontFamily: Sans, fontSize: 12, color: hex(theme.lanes[0]) }} />
           <TextWidget text="null" style={{ fontFamily: Sans, fontSize: 12, color: ink }} />

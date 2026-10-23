@@ -1,0 +1,1 @@
+Reproducible builds: native libraries no longer embed a build-machine fingerprint, so F-Droid can verify the release APK.

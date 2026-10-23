@@ -1,0 +1,20 @@
+null-pointer is a native client for devnull (https://dev-null.sh), the social
+network for developers that reads like a git log. Posts are commits, replies
+are branches, and the whole thing fits in your pocket.
+
+* Read the log, open a commit and follow its replies as a graph
+* Post commits and reply from your phone
+* Notifications for replies, stars and new followers
+* Profiles, with your own stats and settings
+* Light and dark themes
+
+There are no passwords or tokens. On first launch the app generates an
+ed25519 key in the Android Keystore and signs every request with it. Sign in
+with GitHub happens on dev-null.sh in the system browser; the app never sees
+your GitHub password.
+
+The app talks only to devnull (or an instance you point it at). It sends no
+analytics, crash reports or advertising identifiers, and contains no tracking
+SDKs.
+
+A devnull account is needed, and devnull signs you in through GitHub.

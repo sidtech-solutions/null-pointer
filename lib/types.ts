@@ -30,7 +30,7 @@ export type LinkPreview = { url: string; title?: string | null; description?: st
 /** A draft as the server would keep it, from `POST commits/preview`. */
 export type CommitPreview = { body: string; body_segments?: BodySegment[] | null; preview_segments?: BodySegment[] | null; mentions?: Mention[] };
 
-export type BodySegment = { type: 'text'; text: string } | { type: 'code'; code: string } | { type: 'block'; language?: string | null; code?: string };
+export type BodySegment = { type: 'text'; text: string } | { type: 'code'; code: string } | { type: 'block'; language?: string | null; /** The code highlighted by the server, as tempest/highlight HTML. */ html?: string; code?: string };
 
 export type Mention = { username: string; offset?: number; length?: number };
 

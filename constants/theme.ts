@@ -18,6 +18,8 @@ export type Tokens = {
   primarySoft: string;
   primaryInk: string;
   destructive: string;
+  /** The dev/null brand red, for type names in highlighted code as on the web. */
+  brand: string;
   lanes: readonly [string, string, string, string, string, string];
 };
 
@@ -36,6 +38,7 @@ export const light: Tokens = {
   primarySoft: '#e8effc',
   primaryInk: '#ffffff',
   destructive: '#c92a2a',
+  brand: '#ff2d20',
   lanes: ['#d9480f', '#2f9e44', '#9c36b5', '#0c8599', '#c2255c', '#b7791f'],
 };
 
@@ -54,6 +57,7 @@ export const dark: Tokens = {
   primarySoft: '#18233a',
   primaryInk: '#111112',
   destructive: '#ff6b6b',
+  brand: '#ff2d20',
   lanes: ['#ff8a4c', '#51cf66', '#da77f2', '#3bc9db', '#f06595', '#fcc419'],
 };
 

@@ -3,12 +3,15 @@ import { StyleSheet, Text as NativeText, View } from 'react-native';
 
 import { Text } from '@/components/text';
 import { Fonts, Radius, useTheme } from '@/constants/theme';
+import { type HighlightNode, parseHighlighted, plainText } from '@/lib/highlight';
+import { groupQuotes } from '@/lib/quotes';
 import type { BodySegment, Commit } from '@/lib/types';
 import { hrefFor, linkLabel, type LinkTarget, linkTarget, UrlPattern, withoutTrailingPunctuation } from '@/lib/urls';
 
 type Run = { kind: 'text' | 'mention' | 'wordmark' | 'code'; text: string } | { kind: 'link'; text: string; href: string; target: LinkTarget };
 
-type Block = { kind: 'paragraph'; runs: Run[] } | { kind: 'code'; code: string; language: string | null };
+/** A paragraph of prose (quoted when its lines started with `>`), or a fenced code block as the server highlighted it. */
+type Block = { kind: 'paragraph'; runs: Run[]; quoted: boolean } | { kind: 'code'; code: string; language: string | null; nodes: HighlightNode[] | null };
 
 const MentionOrWordmark = /((?<![\w.\/-])@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)|((?<![\p{L}\p{M}\p{N}_.\/-])\/dev\/null(?![\p{L}\p{M}\p{N}_\/-]))/gu;
 
@@ -68,25 +71,31 @@ function runsOf(text: string): Run[] {
 export function blocksOf(body: string, segments?: BodySegment[] | null): Block[] {
   const list = segments && segments.length > 0 ? segments : body === '' ? [] : [{ type: 'text' as const, text: body }];
   const blocks: Block[] = [];
-  let runs: Run[] = [];
 
-  for (const segment of list) {
-    if (segment.type === 'text') {
-      runs.push(...runsOf(segment.text ?? ''));
-    } else if (segment.type === 'code') {
-      runs.push({ kind: 'code', text: segment.code ?? '' });
-    } else if (segment.type === 'block') {
-      if (runs.length > 0) {
-        blocks.push({ kind: 'paragraph', runs });
-        runs = [];
+  for (const group of groupQuotes(list)) {
+    let runs: Run[] = [];
+
+    for (const segment of group.segments) {
+      if (segment.type === 'text') {
+        runs.push(...runsOf(segment.text ?? ''));
+      } else if (segment.type === 'code') {
+        runs.push({ kind: 'code', text: segment.code ?? '' });
+      } else if (segment.type === 'block') {
+        if (runs.length > 0) {
+          blocks.push({ kind: 'paragraph', runs, quoted: group.quoted });
+          runs = [];
+        }
+
+        const nodes = typeof segment.html === 'string' ? parseHighlighted(segment.html) : null;
+        const code = segment.code ?? (nodes ? plainText(nodes) : fencedCode(body, blocks.filter((block) => block.kind === 'code').length));
+
+        blocks.push({ kind: 'code', code, language: segment.language ?? null, nodes });
       }
-
-      blocks.push({ kind: 'code', code: segment.code ?? fencedCode(body, blocks.filter((block) => block.kind === 'code').length), language: segment.language ?? null });
     }
-  }
 
-  if (runs.length > 0) {
-    blocks.push({ kind: 'paragraph', runs });
+    if (runs.length > 0) {
+      blocks.push({ kind: 'paragraph', runs, quoted: group.quoted });
+    }
   }
 
   return blocks;
@@ -127,11 +136,11 @@ export const CommitBody = memo(function CommitBody({
           <View key={index} style={[styles.code, { backgroundColor: theme.wash, borderColor: theme.hairline }]}>
             {block.language ? <Text variant="mono" muted style={styles.language}>{block.language}</Text> : null}
             <NativeText style={[styles.codeText, { color: theme.ink }]} selectable>
-              {block.code}
+              {block.nodes ? <Highlighted nodes={block.nodes} colors={tokenColors(theme)} /> : block.code}
             </NativeText>
           </View>
         ) : (
-          <Text key={index} muted={muted} numberOfLines={numberOfLines} style={{ fontSize: size, lineHeight }}>
+          <Text key={index} muted={muted} numberOfLines={numberOfLines} style={[{ fontSize: size, lineHeight }, block.quoted && { borderLeftWidth: 2, borderLeftColor: theme.lanes[5], paddingLeft: 12 }]}>
             {block.runs.map((run, runIndex) => {
               switch (run.kind) {
                 case 'link':
@@ -174,6 +183,41 @@ export const CommitBody = memo(function CommitBody({
     </View>
   );
 });
+
+/** The web's colours for tempest/highlight's tokens, from the theme's own palette. */
+function tokenColors(theme: ReturnType<typeof useTheme>): Record<string, { color?: string; fontStyle?: 'italic' }> {
+  return {
+    keyword: { color: theme.primary },
+    type: { color: theme.brand },
+    generic: { color: theme.brand },
+    property: { color: theme.lanes[3] },
+    value: { color: theme.lanes[1] },
+    number: { color: theme.lanes[0] },
+    literal: { color: theme.lanes[0] },
+    variable: { color: theme.lanes[4] },
+    comment: { color: theme.inkMuted, fontStyle: 'italic' },
+    attribute: { fontStyle: 'italic' },
+    addition: { color: theme.lanes[1] },
+    deletion: { color: theme.destructive },
+  };
+}
+
+/** Highlighted code as nested text runs, one per token, inside the block's mono text. */
+function Highlighted({ nodes, colors }: { nodes: HighlightNode[]; colors: Record<string, { color?: string; fontStyle?: 'italic' }> }) {
+  return (
+    <>
+      {nodes.map((node, index) =>
+        'text' in node ? (
+          node.text
+        ) : (
+          <NativeText key={index} style={colors[node.token]}>
+            <Highlighted nodes={node.children} colors={colors} />
+          </NativeText>
+        ),
+      )}
+    </>
+  );
+}
 
 export function isFolded(commit: Commit): boolean {
   if (commit.preview_segments && commit.preview_segments.length > 0) {

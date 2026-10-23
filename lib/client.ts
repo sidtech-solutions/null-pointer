@@ -2,7 +2,7 @@ import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Candidate, Commit, CommitPreview, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, LinkPreview, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
+import type { Candidate, Commit, CommitHit, CommitPreview, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, LinkPreview, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -326,6 +326,34 @@ export const api = {
     const users = (await response.json())?.users;
 
     return Array.isArray(users) ? users.filter((user): user is User => user && typeof user.username === 'string') : [];
+  },
+
+  /**
+   * Commits by meaning, from the web's public search, which the signed API lacks. Three characters at least, 15
+   * searches a minute, and unsigned, so mutes and blocks are not applied.
+   */
+  async searchCommits(term: string, limit = 20): Promise<CommitHit[]> {
+    const query = term.trim().slice(0, 100);
+
+    if (Array.from(query).length < 3) {
+      return [];
+    }
+
+    let response: Response;
+
+    try {
+      response = await fetch(`${baseUrl()}/search/commits?q=${encode(query)}&limit=${limit}`, { headers: { Accept: 'application/json' } });
+    } catch {
+      throw ApiError.couldNotConnect(baseUrl());
+    }
+
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+
+    const commits = (await response.json())?.commits;
+
+    return Array.isArray(commits) ? commits.filter((commit): commit is CommitHit => commit && typeof commit.id === 'string' && typeof commit.body === 'string') : [];
   },
 
   async mentionSuggestions(term: string, context: { reply?: string | null; quote?: string | null } = {}): Promise<User[]> {

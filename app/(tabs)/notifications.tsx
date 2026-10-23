@@ -220,6 +220,7 @@ export default function NotificationsScreen() {
               onToggleGroup={toggleGroup}
               onOpenItem={openNotification}
               onLoadOlder={(notification) => loadGroup(notification, true)}
+              onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.username } })}
             />
           )
         }

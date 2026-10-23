@@ -7,7 +7,7 @@ import { FollowButton } from '@/components/follow-button';
 import { RelativeTime } from '@/components/relative-time';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
-import type { Notification } from '@/lib/types';
+import type { Notification, User } from '@/lib/types';
 
 export function isModeration(notification: Notification): boolean {
   return notification.type === 'approved' || notification.type === 'rejected';
@@ -85,6 +85,7 @@ export const NotificationRow = memo(function NotificationRow({
   onToggleGroup,
   onOpenItem,
   onLoadOlder,
+  onOpenActor,
 }: {
   notification: Notification;
   isNew: boolean;
@@ -95,6 +96,8 @@ export const NotificationRow = memo(function NotificationRow({
   onToggleGroup: (notification: Notification) => void;
   onOpenItem: (notification: Notification) => void;
   onLoadOlder: (notification: Notification) => void;
+  /** The avatars and names open the person; the rest of the row opens the commit. */
+  onOpenActor?: (user: User) => void;
 }) {
   const theme = useTheme();
   const moderation = isModeration(notification);
@@ -119,9 +122,9 @@ export const NotificationRow = memo(function NotificationRow({
           ) : (
             <View style={styles.avatars}>
               {actors.slice(0, 3).map((actor, index) => (
-                <View key={`${actor.id}-${index}`} style={[styles.stacked, index > 0 && styles.overlap, { borderColor: theme.surface }]}>
+                <Pressable key={`${actor.id}-${index}`} onPress={onOpenActor ? () => onOpenActor(actor) : undefined} hitSlop={4} style={[styles.stacked, index > 0 && styles.overlap, { borderColor: theme.surface }]} accessibilityRole="button" accessibilityLabel={`@${actor.username}`}>
                   <Avatar user={actor} size={32} />
-                </View>
+                </Pressable>
               ))}
               {more > 0 && (
                 <View style={[styles.stacked, styles.overlap, styles.moreDisc, { borderColor: theme.surface, backgroundColor: theme.wash }]}>
@@ -139,10 +142,10 @@ export const NotificationRow = memo(function NotificationRow({
           <Text>{sentence(notification)}.</Text>
         ) : (
           <Text>
-            <Text variant="name">{notification.actor?.name || notification.actor?.username}</Text>{' '}
+            <Text variant="name" onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>{notification.actor?.name || notification.actor?.username}</Text>{' '}
             {rest === '' ? (
               <>
-                <Text variant="mono" muted>@{notification.actor?.username}</Text> {sentence(notification)}
+                <Text variant="mono" muted onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>@{notification.actor?.username}</Text> {sentence(notification)}
               </>
             ) : (
               `${rest} ${sentence(notification)}`
@@ -183,10 +186,12 @@ export const NotificationRow = memo(function NotificationRow({
           <View style={styles.group}>
             {(group?.items ?? []).map((item) => (
               <Pressable key={item.id} onPress={() => onOpenItem(item)} style={styles.item}>
-                <Avatar user={item.actor} size={28} />
+                <Pressable onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} hitSlop={4} accessibilityRole="button" accessibilityLabel={`@${item.actor?.username ?? ''}`}>
+                  <Avatar user={item.actor} size={28} />
+                </Pressable>
                 <View style={styles.itemColumn}>
                   <View style={styles.itemHead}>
-                    <Text variant="name" numberOfLines={1} style={styles.shrink}>{item.actor?.name || item.actor?.username}</Text>
+                    <Text variant="name" numberOfLines={1} style={styles.shrink} onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} suppressHighlighting>{item.actor?.name || item.actor?.username}</Text>
                     <View style={styles.spacer} />
                     <Icon type={item.type} color={isModeration(item) ? theme.inkMuted : laneColor(theme, item.actor?.lane)} filled={item.type === 'starred'} />
                     <RelativeTime iso={item.created_at} />

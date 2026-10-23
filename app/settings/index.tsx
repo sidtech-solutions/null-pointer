@@ -19,7 +19,7 @@ import { api, ApiError, baseUrl } from '@/lib/client';
 import { relativeTime } from '@/lib/display';
 import { existingKey, forgetKey } from '@/lib/device-key';
 import { useNow } from '@/lib/now';
-import type { Lane } from '@/lib/types';
+import type { Lane, RemotesFrom } from '@/lib/types';
 import { openLink } from '@/lib/links';
 
 const LaneNames = ['Orange', 'Green', 'Violet', 'Teal', 'Rose', 'Ochre'];
@@ -80,6 +80,27 @@ export default function SettingsScreen() {
       failed(error, 'fatal: could not change pastéis mode.');
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+
+  const remotes = me.data?.remotes ?? null;
+
+  const remotesSwitch = useMutation({
+    mutationFn: (enabled: boolean) => api.setRemotes(enabled),
+    onSuccess: (fresh) => {
+      queryClient.setQueryData(['me'], fresh);
+      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+    },
+    onError: (error) => failed(error, 'fatal: could not change Remotes.'),
+  });
+
+  const remotePreferences = useMutation({
+    mutationFn: ({ from, pullReceipts }: { from: RemotesFrom; pullReceipts: boolean }) => api.setRemotePreferences(from, pullReceipts),
+    onMutate: ({ from, pullReceipts }) => queryClient.setQueryData(['me'], (data: typeof me.data) => (data?.remotes ? { ...data, remotes: { ...data.remotes, from, pull_receipts: pullReceipts } } : data)),
+    onSuccess: (fresh) => queryClient.setQueryData(['me'], fresh),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+      failed(error, 'fatal: could not save the Remotes settings.');
+    },
   });
 
   const pickTheme = (next: ThemePreference) => {
@@ -214,6 +235,43 @@ export default function SettingsScreen() {
             </View>
             <Switch value={me.data?.pasteis_mode ?? false} onValueChange={(value) => pasteis.mutate(value)} trackColor={{ true: theme.primary }} disabled={!me.data} accessibilityLabel="Pastéis mode" />
           </View>
+        </Section>
+
+        <Section>
+          <View style={styles.toggleRow}>
+            <View style={styles.shrink}>
+              <Text variant="section">Remotes</Text>
+              <Text variant="small" muted>Push messages to people and take theirs. While off, nobody can push to you and your conversations wait for you to come back.</Text>
+            </View>
+            <Switch value={remotes !== null} onValueChange={(value) => remotesSwitch.mutate(value)} trackColor={{ true: theme.primary }} disabled={!me.data || remotesSwitch.isPending} accessibilityLabel="Remotes" />
+          </View>
+          {remotes && (
+            <>
+              <View style={styles.shrink}>
+                <Text variant="label">Who can push to you</Text>
+                <Text variant="small" muted>
+                  {remotes.everyone ? '' : 'People you follow. '}
+                  {remotes.requests ? 'Anyone else can push once; their request waits in Fetched until you merge it.' : 'Anyone else gets told you don’t follow them yet.'}
+                </Text>
+              </View>
+              {remotes.everyone && (
+                <View style={[styles.segments, { borderColor: theme.hairline }]}>
+                  {(['following', 'everyone'] as RemotesFrom[]).map((option) => (
+                    <Pressable key={option} onPress={() => remotePreferences.mutate({ from: option, pullReceipts: remotes.pull_receipts })} style={[styles.segment, remotes.from === option && { backgroundColor: theme.primarySoft }]} accessibilityRole="radio" accessibilityState={{ checked: remotes.from === option }}>
+                      <Text variant="nav" color={remotes.from === option ? theme.primary : theme.inkMuted}>{option === 'following' ? 'People you follow' : 'Everyone'}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <View style={styles.toggleRow}>
+                <View style={styles.shrink}>
+                  <Text variant="label">Share pulls</Text>
+                  <Text variant="small" muted>Let people see when you’ve read their messages, and see when they’ve read yours. Only shows when both of you share.</Text>
+                </View>
+                <Switch value={remotes.pull_receipts} onValueChange={(value) => remotePreferences.mutate({ from: remotes.from, pullReceipts: value })} trackColor={{ true: theme.primary }} disabled={remotePreferences.isPending} accessibilityLabel="Share pulls" />
+              </View>
+            </>
+          )}
         </Section>
 
         <Section>

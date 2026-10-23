@@ -134,7 +134,14 @@ export type CurrentUser = {
   apple_linked: boolean;
   pasteis_remaining: number | null;
   pasteis_resets_at: string | null;
+  /** null while Remotes are turned off. */
+  remotes: RemotesSettings | null;
 };
+
+export type RemotesFrom = 'following' | 'everyone';
+
+/** Who can push to the user, whether they share pulls, what the site lets them choose, and the unread badge. */
+export type RemotesSettings = { from: RemotesFrom; pull_receipts: boolean; requests: boolean; everyone: boolean; unread_count: number };
 
 export const PollDurations = [
   { minutes: 60, label: '1 hour' },
@@ -149,3 +156,75 @@ export type PollDuration = (typeof PollDurations)[number]['minutes'];
 export type NewPoll = { options: string[]; duration: PollDuration };
 
 export const PollLimits = { minOptions: 2, maxOptions: 4, maxOptionLength: 50 } as const;
+
+export const MessageMaxLength = 2000;
+
+export const OrgLimits = { maxNameLength: 60, maxMembers: 100 } as const;
+
+export type InboxTab = 'open' | 'fetched' | 'stashed';
+
+export type PushAccess = 'open' | 'request' | 'waiting' | 'restricted' | 'closed';
+
+export type OrgRole = 'maintainer' | 'contributor';
+
+export type OrgEvent = 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'promoted' | 'demoted' | 'inherited';
+
+export type MessageReaction = { user_id: string; emoji: string };
+
+export type ReactionUsage = { emoji: string; count: number };
+
+export type MessageReply = { id: number; user_id: string; body: string; images_count: number; has_voice?: boolean };
+
+export type MessageImage = { id: string; url: string; width: number; height: number; description: string | null };
+
+export type Message = {
+  id: number;
+  user_id: string;
+  client_id: string;
+  body: string;
+  body_segments?: BodySegment[] | null;
+  reply_to_id?: number | null;
+  reply_to?: MessageReply | null;
+  link_preview?: LinkPreview | null;
+  images?: MessageImage[];
+  reactions?: MessageReaction[];
+  /** Orgs only: a logged change rather than something someone wrote. */
+  event?: OrgEvent | null;
+  subject_id?: string | null;
+  user?: User;
+  subject?: User | null;
+  created_at: string;
+};
+
+export type OrgRef = { id: string; name: string | null };
+
+export type OrgMember = { user: User; role: OrgRole | null; read_through_id?: number };
+
+export type ConversationSummary = {
+  id: string;
+  kind: 'direct' | 'org';
+  name: string | null;
+  partner: User | null;
+  members: { user: User; role: OrgRole | null }[] | null;
+  last_message: Message | null;
+  last_message_at: string | null;
+  /** Messages from others the user hasn't pulled yet. */
+  ahead: number;
+  partner_read_through_id: number;
+  partner_read_at: string | null;
+  is_archived: boolean;
+};
+
+export type InboxPage = { data: ConversationSummary[]; has_more: boolean; unread_count: number; requests_count: number };
+
+export type ReactionChange = { id: number; reactions: MessageReaction[] };
+
+type ThreadBase = { messages: Message[]; has_older: boolean; reactions_version: number; reaction_changes: ReactionChange[]; read_through_id: number; is_archived: boolean; access: PushAccess };
+
+export type DirectThread = ThreadBase & { kind: 'direct'; partner: User; partner_read_through_id: number; partner_read_at: string | null; partner_typing: boolean };
+
+export type OrgThread = ThreadBase & { kind: 'org'; org: OrgRef; members: OrgMember[]; typing: string[]; role: OrgRole | null };
+
+export type Thread = DirectThread | OrgThread;
+
+export type Candidate = { user: User; reason: string | null };

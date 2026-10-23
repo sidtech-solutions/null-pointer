@@ -10,8 +10,10 @@ import { api } from '@/lib/client';
 export default function TabLayout() {
   const theme = useTheme();
   const { user, status } = useAccount();
-  const me = useQuery({ queryKey: ['me'], queryFn: () => api.me(), enabled: status === 'signed-in', staleTime: 60_000 });
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api.me(), enabled: status === 'signed-in', staleTime: 60_000, refetchInterval: 30_000 });
   const unread = me.data?.unread_notifications_count ?? 0;
+  const unreadRemotes = me.data?.remotes?.unread_count ?? 0;
+  const badgeStyle = { backgroundColor: theme.primary, color: theme.primaryInk, fontFamily: Fonts.mono, fontSize: 11 };
   const accent = user?.lane !== null && user?.lane !== undefined ? laneColor(theme, user.lane) : theme.primary;
 
   const icon = (Icon: typeof Bell) =>
@@ -34,8 +36,8 @@ export default function TabLayout() {
         sceneStyle: { backgroundColor: theme.surface },
       }}>
       <Tabs.Screen name="index" options={{ title: 'Log', tabBarIcon: icon(GitCommitVertical) }} />
-      <Tabs.Screen name="notifications" options={{ title: 'Notifications', tabBarIcon: icon(Bell), tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined, tabBarBadgeStyle: { backgroundColor: theme.primary, color: theme.primaryInk, fontFamily: Fonts.mono, fontSize: 11 } }} />
-      <Tabs.Screen name="remotes" options={{ title: 'Remotes', tabBarIcon: icon(MessagesSquare) }} />
+      <Tabs.Screen name="notifications" options={{ title: 'Notifications', tabBarIcon: icon(Bell), tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined, tabBarBadgeStyle: badgeStyle }} />
+      <Tabs.Screen name="remotes" options={{ title: 'Remotes', tabBarIcon: icon(MessagesSquare), tabBarBadge: unreadRemotes > 0 ? (unreadRemotes > 99 ? '99+' : unreadRemotes) : undefined, tabBarBadgeStyle: badgeStyle }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon(UserRound) }} />
     </Tabs>
   );

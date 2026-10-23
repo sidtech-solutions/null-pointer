@@ -76,6 +76,8 @@ function RootLayoutNav() {
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
         <Stack.Screen name="commits/[id]" />
+        <Stack.Screen name="remotes/[target]" />
+        <Stack.Screen name="remotes/new" />
         <Stack.Screen name="users/[username]/index" />
         <Stack.Screen name="users/[username]/[type]" />
         <Stack.Screen name="settings/index" />

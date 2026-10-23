@@ -12,7 +12,7 @@ import { Header } from '@/components/header';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
-import { api, nextCursor } from '@/lib/client';
+import { api, nextCursor, toConnection } from '@/lib/client';
 import type { Connection } from '@/lib/types';
 
 export default function ConnectionsScreen() {
@@ -29,7 +29,7 @@ export default function ConnectionsScreen() {
     getNextPageParam: (last) => nextCursor(last),
   });
 
-  const people = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
+  const people = useMemo(() => query.data?.pages.flatMap((page) => page.data.map(toConnection)) ?? [], [query.data]);
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.surface }]}>

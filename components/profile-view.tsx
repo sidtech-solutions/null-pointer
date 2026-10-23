@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, CalendarDays, Ellipsis, Link as LinkIcon, MapPin, Pin, Star, Terminal } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Building2, CalendarDays, Ellipsis, Link as LinkIcon, MapPin, MessageSquare, Pin, Star, Terminal } from 'lucide-react-native';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -34,10 +35,13 @@ const Months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 export function ProfileView({ username, onOpenConnections, onOpenStarred, footer }: { username: string; onOpenConnections: (type: 'followers' | 'following') => void; onOpenStarred?: () => void; footer?: ReactNode }) {
   const theme = useTheme();
+  const router = useRouter();
   const account = useAccount();
   const handlers = useCommitHandlers();
   const now = useNow();
   const queryClient = useQueryClient();
+  const me = useQuery({ queryKey: ['me'], queryFn: () => api.me(), enabled: account.status === 'signed-in', staleTime: 60_000 });
+  const canPush = me.data?.remotes !== null && me.data?.remotes !== undefined;
 
   const safety = useMutation({
     mutationFn: ({ action }: { action: 'mute' | 'unmute' | 'block' | 'unblock' }) => api[action](username),
@@ -139,6 +143,11 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
                 <Pressable onPress={more} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="More">
                   <Ellipsis size={16} color={theme.ink} strokeWidth={2} />
                 </Pressable>
+                {canPush && (
+                  <Pressable onPress={() => router.push({ pathname: '/remotes/[target]', params: { target: `@${username}` } })} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel={`Push a message to @${username}`}>
+                    <MessageSquare size={16} color={theme.ink} strokeWidth={2} />
+                  </Pressable>
+                )}
                 <FollowButton username={username} isFollowing={profile.data?.is_following ?? false} />
               </View>
             )}

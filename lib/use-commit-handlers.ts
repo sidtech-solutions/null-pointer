@@ -1,27 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 
 import type { CommitHandlers } from '@/components/commit-actions';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
 import { patchCommit, removeCommit } from '@/lib/commit-cache';
 import { shortHash } from '@/lib/display';
+import { tap } from '@/lib/haptics';
 import { reportCommit } from '@/lib/report-store';
 import { toast } from '@/lib/toast';
 import type { Commit } from '@/lib/types';
 
 import { useAccount } from './account';
-
-/** A light tick under the thumb, so a star or vote feels taken before the request answers. */
-function tap(): void {
-  if (Platform.OS === 'web') {
-    return;
-  }
-
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-}
 
 // Stars are optimistic with rollback on error. Every write patches all cached copies of the commit.
 export function useCommitHandlers(): CommitHandlers {

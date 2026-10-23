@@ -2,7 +2,7 @@ import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Commit, CommitThread, Connection, CurrentUser, NewPoll, Notification, Page, Profile, User } from './types';
+import type { Candidate, Commit, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -138,22 +138,165 @@ export function nextCursor<T>(page: Page<T>): string | null {
   return page.meta?.next_cursor ?? page.next_cursor ?? null;
 }
 
+/** Who a conversation is with: one person, by handle, or an org, by id. */
+export type RemoteTarget = { kind: 'direct'; username: string } | { kind: 'org'; id: string };
+
+function remotePath(target: RemoteTarget): string {
+  return target.kind === 'direct' ? `remotes/@${encode(target.username)}` : `remotes/orgs/${encode(target.id)}`;
+}
+
+function currentUser(json: any): CurrentUser {
+  const data = json.data ?? json;
+  const remotes = data.remotes;
+
+  return {
+    user: data.user ?? data,
+    unread_notifications_count: Number(json.unread_notifications_count ?? data.unread_notifications_count ?? 0),
+    preferred_lane: data.preferred_lane ?? null,
+    automatic_lane: typeof data.automatic_lane === 'number' ? data.automatic_lane : null,
+    pasteis_mode: data.pasteis_mode === true,
+    github_synced_at: typeof data.github_synced_at === 'string' ? data.github_synced_at : null,
+    apple_linked: json.apple_linked === true,
+    pasteis_remaining: typeof data.pasteis_remaining === 'number' ? data.pasteis_remaining : null,
+    pasteis_resets_at: typeof data.pasteis_resets_at === 'string' ? data.pasteis_resets_at : null,
+    remotes:
+      remotes && typeof remotes === 'object'
+        ? {
+            from: remotes.from === 'everyone' ? 'everyone' : 'following',
+            pull_receipts: remotes.pull_receipts === true,
+            requests: remotes.requests === true,
+            everyone: remotes.everyone === true,
+            unread_count: Number(remotes.unread_count ?? 0),
+          }
+        : null,
+  };
+}
+
+/** A follower or followee as the API sends it (a user with two flags), or as the app already stores it. */
+export function toConnection(raw: Connection | (User & { is_followed?: boolean; follows_you?: boolean })): Connection {
+  if ('user' in raw && raw.user && typeof raw.user === 'object') {
+    return raw;
+  }
+
+  const { is_followed, follows_you, ...user } = raw as User & { is_followed?: boolean; follows_you?: boolean };
+
+  return { user, is_followed: is_followed === true, follows_you: follows_you === true };
+}
+
 export const api = {
   async me(): Promise<CurrentUser> {
-    const json = await send('GET', 'me');
-    const data = json.data ?? json;
+    return currentUser(await send('GET', 'me'));
+  },
 
-    return {
-      user: data.user ?? data,
-      unread_notifications_count: Number(json.unread_notifications_count ?? data.unread_notifications_count ?? 0),
-      preferred_lane: data.preferred_lane ?? null,
-      automatic_lane: typeof data.automatic_lane === 'number' ? data.automatic_lane : null,
-      pasteis_mode: data.pasteis_mode === true,
-      github_synced_at: typeof data.github_synced_at === 'string' ? data.github_synced_at : null,
-      apple_linked: json.apple_linked === true,
-      pasteis_remaining: typeof data.pasteis_remaining === 'number' ? data.pasteis_remaining : null,
-      pasteis_resets_at: typeof data.pasteis_resets_at === 'string' ? data.pasteis_resets_at : null,
+  /** Turns Remotes on or off. Off, nobody can push to the user and the inbox is gone until they come back. */
+  async setRemotes(enabled: boolean): Promise<CurrentUser> {
+    return currentUser(await send('PUT', 'me/remotes', {}, { enabled }));
+  },
+
+  async setRemotePreferences(from: RemotesFrom, pullReceipts: boolean): Promise<CurrentUser> {
+    return currentUser(await send('PUT', 'me/remote-preferences', {}, { from, pull_receipts: pullReceipts }));
+  },
+
+  /** One page of the inbox, newest first; `before` is the id of the last conversation shown. */
+  async remotes(tab: InboxTab, term = '', before?: string | null): Promise<InboxPage> {
+    const json = await send('GET', 'remotes', { tab: tab === 'open' ? null : tab, q: term, before });
+
+    return { data: Array.isArray(json.data) ? json.data : [], has_more: json.has_more === true, unread_count: Number(json.unread_count ?? 0), requests_count: Number(json.requests_count ?? 0) };
+  },
+
+  /**
+   * The latest page of a conversation, the page before a message, or everything
+   * after one plus the reactions changed since a version, as a poll asks for it.
+   */
+  async thread(target: RemoteTarget, options: { after?: number | null; before?: number | null; reactionsAfter?: number | null } = {}): Promise<Thread> {
+    const json = await send('GET', `${remotePath(target)}/messages`, {
+      after: options.after === null || options.after === undefined ? null : String(options.after),
+      before: options.before === null || options.before === undefined ? null : String(options.before),
+      reactions_after: options.reactionsAfter === null || options.reactionsAfter === undefined ? null : String(options.reactionsAfter),
+    });
+    const data = json.data ?? json;
+    const base = {
+      messages: Array.isArray(data.messages) ? data.messages : [],
+      has_older: data.has_older === true,
+      reactions_version: Number(data.reactions_version ?? 0),
+      reaction_changes: Array.isArray(data.reaction_changes) ? data.reaction_changes : [],
+      read_through_id: Number(data.read_through_id ?? 0),
+      is_archived: data.is_archived === true,
+      access: typeof data.access === 'string' ? data.access : 'open',
     };
+
+    if (target.kind === 'org') {
+      return { ...base, kind: 'org', org: data.org ?? { id: target.id, name: null }, members: Array.isArray(data.members) ? data.members : [], typing: Array.isArray(data.typing) ? data.typing : [], role: data.role ?? null };
+    }
+
+    return { ...base, kind: 'direct', partner: data.partner, partner_read_through_id: Number(data.partner_read_through_id ?? 0), partner_read_at: data.partner_read_at ?? null, partner_typing: data.partner_typing === true };
+  },
+
+  /** Sending the same clientId again, as a retry does, answers with the message already created. */
+  async sendMessage(target: RemoteTarget, message: { clientId: string; body: string; replyToId?: number | null; images?: Upload[]; descriptions?: string[] }): Promise<Message> {
+    const payload: Record<string, unknown> = { body: message.body, client_id: message.clientId };
+
+    if (message.replyToId) {
+      payload.reply_to_id = message.replyToId;
+    }
+
+    if (message.images && message.images.length > 0 && message.descriptions?.some((description) => description !== '')) {
+      payload.image_descriptions = message.images.map((_, index) => message.descriptions?.[index] || null);
+    }
+
+    const json = await send('POST', `${remotePath(target)}/messages`, {}, payload, message.images);
+
+    return json.data ?? json;
+  },
+
+  /** Pulls the conversation through a message. It only ever moves forward. */
+  async markRemoteRead(target: RemoteTarget, through: number): Promise<void> {
+    await send('PUT', `${remotePath(target)}/read`, {}, { through });
+  },
+
+  async remoteTyping(target: RemoteTarget): Promise<void> {
+    await send('PUT', `${remotePath(target)}/typing`);
+  },
+
+  /** Stashing is for this user only; the conversation pops back into Open when anyone writes. */
+  async stashRemote(target: RemoteTarget, stashed: boolean): Promise<void> {
+    await send(stashed ? 'POST' : 'DELETE', `${remotePath(target)}/archive`);
+  },
+
+  async mergeRequest(username: string): Promise<void> {
+    await send('POST', `remotes/@${encode(username)}/merge`);
+  },
+
+  /** Dropping is silent: the sender's request keeps waiting on their side. */
+  async dropRequest(username: string): Promise<void> {
+    await send('POST', `remotes/@${encode(username)}/drop`);
+  },
+
+  async reactionUsage(): Promise<ReactionUsage[]> {
+    const json = await send('GET', 'remotes/reactions');
+
+    return Array.isArray(json.usage) ? json.usage : [];
+  },
+
+  /** Answers with the message's reactions in the order they were left. */
+  async react(messageId: number, emoji: string, on: boolean): Promise<MessageReaction[]> {
+    const json = await send(on ? 'POST' : 'DELETE', `remotes/messages/${encode(String(messageId))}/reactions`, {}, { emoji });
+
+    return Array.isArray(json.reactions) ? json.reactions : [];
+  },
+
+  /** People to push to or add to an org, each with the reason they can't be picked, if any. */
+  async remoteCandidates(term: string, options: { forOrg?: boolean; org?: string | null } = {}): Promise<Candidate[]> {
+    const json = await send('GET', 'remotes/candidates', { q: term, org: options.org ?? null, for: options.forOrg ? 'org' : null });
+
+    return Array.isArray(json.candidates) ? json.candidates : [];
+  },
+
+  /** Starts an org the user maintains, with everyone named as contributors. Answers with its id. */
+  async createOrg(name: string, members: string[]): Promise<string> {
+    const json = await send('POST', 'remotes/orgs', {}, { name: name.trim() === '' ? null : name.trim(), members });
+
+    return String(json.org?.id ?? json.data?.org?.id ?? '');
   },
 
   async syncGitHub(): Promise<void> {
@@ -294,8 +437,11 @@ export const api = {
     return send('GET', `users/${encode(username)}/commits`, { replies: tab === 'replies' ? '1' : null, cursor });
   },
 
-  connections(username: string, type: 'followers' | 'following', cursor?: string | null): Promise<Page<Connection>> {
-    return send('GET', `users/${encode(username)}/${type}`, { cursor });
+  /** The API lists plain users with `is_followed` and `follows_you` on each; the app keeps the user apart from the flags. */
+  async connections(username: string, type: 'followers' | 'following', cursor?: string | null): Promise<Page<Connection>> {
+    const page: Page<Connection | (User & { is_followed?: boolean; follows_you?: boolean })> = await send('GET', `users/${encode(username)}/${type}`, { cursor });
+
+    return { ...page, data: (page.data ?? []).map(toConnection) };
   },
 
   async follow(username: string): Promise<void> {

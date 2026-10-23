@@ -4,6 +4,7 @@ import { CornerUpLeft } from 'lucide-react-native';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
+import { viewerParams } from '@/lib/viewer';
 import { Avatar } from '@/components/avatar';
 import { CommitBody } from '@/components/commit-body';
 import { Text } from '@/components/text';
@@ -47,7 +48,7 @@ function Images({ images, width }: { images: MessageImage[]; width: number }) {
   const theme = useTheme();
   const router = useRouter();
   const shown = images.filter((image) => typeof image.url === 'string' && image.url !== '').slice(0, 3);
-  const view = (image: MessageImage) => router.push({ pathname: '/image', params: { url: image.url, alt: image.description ?? '' } });
+  const view = (image: MessageImage) => router.push({ pathname: '/image', params: viewerParams(shown.map((candidate) => ({ url: candidate.url, alt: candidate.description })), shown.indexOf(image)) });
 
   if (shown.length === 0) {
     return null;

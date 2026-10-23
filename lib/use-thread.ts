@@ -188,16 +188,26 @@ export function useThread(target: RemoteTarget, active: boolean) {
           descriptions: message.images.map((image) => image.description),
         });
 
+        const before = queryClient.getQueryData<Thread>(queryKey)?.messages.at(-1)?.id ?? 0;
+
         patch((current) => (current.messages.some((existing) => existing.id === created.id) ? current : { ...current, messages: byId([...current.messages, created]) }));
         setPending((list) => list.filter((candidate) => candidate.client_id !== message.client_id));
         lastActivity.current = Date.now();
         queryClient.invalidateQueries({ queryKey: ['remotes'] });
+
+        // A message from the other side that landed just before this one has a lower id than it,
+        // which the next poll (after the newest id) would skip; ask once from where the thread was.
+        if (created.id > before + 1) {
+          api.thread(targetRef.current, { after: before, reactionsAfter: queryClient.getQueryData<Thread>(queryKey)?.reactions_version ?? 0 })
+            .then(absorb)
+            .catch(() => {});
+        }
       } catch (error) {
         const reason = error instanceof ApiError ? error.firstError() : 'fatal: could not push the message.';
         setPending((list) => list.map((candidate) => (candidate.client_id === message.client_id ? { ...candidate, status: 'rejected', error: reason } : candidate)));
       }
     },
-    [patch, queryClient],
+    [patch, queryClient, queryKey, absorb],
   );
 
   const send = useCallback(

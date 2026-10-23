@@ -5,15 +5,16 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import type { CommitImage, LinkPreview } from '@/lib/types';
+import { viewerParams } from '@/lib/viewer';
 import { openLink } from '@/lib/links';
 
 export function CommitMedia({ images, preview, compact = false }: { images?: CommitImage[]; preview?: LinkPreview | null; compact?: boolean }) {
   const theme = useTheme();
   const router = useRouter();
   const { width: screen } = useWindowDimensions();
-  const view = (image: CommitImage) => router.push({ pathname: '/image', params: { url: image.url, alt: image.description ?? '' } });
   const width = screen - Space.rail - Space.gutter;
   const shown = (images ?? []).filter((image) => typeof image.url === 'string' && image.url !== '').slice(0, 4);
+  const view = (image: CommitImage) => router.push({ pathname: '/image', params: viewerParams(shown.map((candidate) => ({ url: candidate.url, alt: candidate.description })), shown.indexOf(image)) });
 
   if (shown.length === 0 && !preview?.url) {
     return null;

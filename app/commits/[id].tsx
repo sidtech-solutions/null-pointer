@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, Eye, ImagePlus, Trash2 } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,6 +23,7 @@ import { useKeyboardShown } from '@/lib/keyboard';
 import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { threadRows } from '@/lib/timeline';
+import { toast } from '@/lib/toast';
 import type { Commit, Page, User } from '@/lib/types';
 import { useCommitHandlers } from '@/lib/use-commit-handlers';
 
@@ -39,6 +40,7 @@ export default function CommitScreen() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
   const [caret, setCaret] = useState(0);
@@ -123,6 +125,9 @@ export default function CommitScreen() {
       patchCommit(queryClient, id, (c) => ({ ...c, replies_count: c.replies_count + 1 }));
       queryClient.invalidateQueries({ queryKey: ['replies', id] });
       queryClient.invalidateQueries({ queryKey: ['log'] });
+      // The reply goes under the last one loaded, so that is where to look.
+      setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 150);
+      toast(`[reply ${created.short_hash || shortHash(created.id)}] ${created.status === 'approved' || created.status === '' ? 'posted.' : 'waiting for approval.'}`);
     },
     onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not reply.'),
   });
@@ -171,7 +176,7 @@ export default function CommitScreen() {
         }
       />
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         {!commit && thread.isPending && (
           <View style={styles.loading}>
             <ActivityIndicator color={theme.inkMuted} />

@@ -127,10 +127,15 @@ async function send(method: string, path: string, query: Query = {}, payload?: u
     return {};
   }
 
+  // A maintenance page answers 200 with HTML; that is an error to show, never an empty answer to keep.
+  if (!/\bjson\b/i.test(response.headers.get('content-type') ?? '')) {
+    throw new ApiError('fatal: dev-null.sh is being updated. Try again in a minute.', response.status);
+  }
+
   try {
     return await response.json();
   } catch {
-    return {};
+    throw new ApiError('fatal: dev-null.sh sent an answer the app could not read.', response.status);
   }
 }
 

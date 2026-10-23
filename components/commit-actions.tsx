@@ -1,7 +1,8 @@
 import { ChevronDown, ChevronRight, Ellipsis, MessageSquareReply, Quote, Star } from 'lucide-react-native';
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
-import { ActionSheetIOS, Alert, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
+import { type ReactNode, useState } from 'react';
+import { ActionSheetIOS, Alert, Modal, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/text';
 import { useTheme } from '@/constants/theme';
@@ -16,6 +17,8 @@ export type CommitHandlers = {
   onOpen?: (commit: Commit) => void;
   onDelete?: (commit: Commit) => void;
   onPin?: (commit: Commit) => void;
+  /** Opens the commit as an image to share. */
+  onCard?: (commit: Commit) => void;
   onOpenAuthor?: (user: User) => void;
   /** Feed only: toggles the reply thread in place. */
   onToggleReplies?: (commit: Commit) => void;
@@ -71,6 +74,9 @@ export function CommitActions({
   handlers: CommitHandlers;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  // Android's Alert shows three buttons at most, so More opens a sheet of its own there.
+  const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const isOwn = viewerId !== undefined && String(commit.author?.id) === String(viewerId);
   const isApproved = commit.status === 'approved' || commit.status === '';
   const pasteis = handlers.pasteisLeft ?? null;
@@ -97,15 +103,19 @@ export function CommitActions({
     const pinLabel = commit.is_pinned ? 'Unpin from profile' : 'Pin to profile';
     const canPin = isOwn && !commit.parent_id && Boolean(handlers.onPin);
     const togglePin = () => handlers.onPin?.(commit);
+    const canCard = isApproved && Boolean(handlers.onCard);
+    const card = () => handlers.onCard?.(commit);
 
     if (Platform.OS === 'ios') {
-      const options = ['Share link', ...(canPin ? [pinLabel] : []), ...(canReport ? ['Report commit'] : []), ...(isOwn ? ['Delete'] : []), 'Cancel'];
+      const options = ['Share link', ...(canCard ? ['Share as image'] : []), ...(canPin ? [pinLabel] : []), ...(canReport ? ['Report commit'] : []), ...(isOwn ? ['Delete'] : []), 'Cancel'];
 
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: options.length - 1, destructiveButtonIndex: isOwn ? options.length - 2 : undefined }, (index) => {
         const picked = options[index];
 
         if (picked === 'Share link') {
           share();
+        } else if (picked === 'Share as image') {
+          card();
         } else if (picked === pinLabel) {
           togglePin();
         } else if (picked === 'Report commit') {
@@ -118,15 +128,13 @@ export function CommitActions({
       return;
     }
 
-    // Android shows three buttons at most; with three actions, tapping outside is the way to cancel.
-    const buttons = [
-      { text: 'Share link', onPress: share },
-      ...(canPin ? [{ text: pinLabel, onPress: togglePin }] : []),
-      ...(canReport ? [{ text: 'Report commit', onPress: report }] : []),
-      ...(isOwn ? [{ text: 'Delete', style: 'destructive' as const, onPress: remove }] : []),
-    ];
-
-    Alert.alert(commit.short_hash ?? '', undefined, buttons.length >= 3 ? buttons : [...buttons, { text: 'Cancel', style: 'cancel' as const }], { cancelable: true });
+    setMenu([
+      { label: 'Share link', run: share },
+      ...(canCard ? [{ label: 'Share as image', run: card }] : []),
+      ...(canPin ? [{ label: pinLabel, run: togglePin }] : []),
+      ...(canReport ? [{ label: 'Report commit', run: report }] : []),
+      ...(isOwn ? [{ label: 'Delete', run: remove, destructive: true }] : []),
+    ]);
   };
 
   return (
@@ -170,14 +178,45 @@ export function CommitActions({
       <Action onPress={more} label="More" centered>
         <Ellipsis size={iconSize} color={theme.inkMuted} strokeWidth={2} />
       </Action>
+
+      {Platform.OS !== 'ios' && (
+        <Modal visible={menu !== null} transparent animationType="fade" onRequestClose={() => setMenu(null)} statusBarTranslucent>
+          <Pressable onPress={() => setMenu(null)} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+              <Text variant="mono" muted style={styles.sheetTitle}>{commit.short_hash || ''}</Text>
+              {(menu ?? []).map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={() => {
+                    setMenu(null);
+                    item.run();
+                  }}
+                  style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: theme.wash }]}
+                  accessibilityRole="button">
+                  <Text color={item.destructive ? theme.destructive : theme.ink}>{item.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable onPress={() => setMenu(null)} style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
+                <Text muted>Cancel</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
+
+type MenuItem = { label: string; run: () => void; destructive?: boolean };
 
 const styles = StyleSheet.create({
   // Pulled left so the first icon lines up with the text above, and up into
   // the gap so the row reads as tight as before while the targets stay 44pt.
   row: { flexDirection: 'row', alignItems: 'center', marginLeft: -12, marginTop: -8, marginBottom: -6, gap: 4 },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 8 },
+  sheetTitle: { paddingHorizontal: 20, paddingVertical: 8 },
+  sheetRow: { paddingHorizontal: 20, paddingVertical: 14 },
   action: { flexDirection: 'row', alignItems: 'center', minWidth: 48, height: ActionHeight, paddingHorizontal: 12, gap: 6, borderRadius: 22 },
   centered: { justifyContent: 'center' },
   pressed: { opacity: 0.45 },

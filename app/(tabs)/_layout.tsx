@@ -1,17 +1,26 @@
 import { useQuery } from '@tanstack/react-query';
 import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
 import { Bell, GitCommitVertical, MessagesSquare, UserRound } from 'lucide-react-native';
 import { type ColorValue, StyleSheet, View } from 'react-native';
 
 import { Fonts, laneColor, Radius, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api } from '@/lib/client';
+import { refreshStreakWidget } from '@/lib/widgets';
 
 export default function TabLayout() {
   const theme = useTheme();
   const { user, status } = useAccount();
   const me = useQuery({ queryKey: ['me'], queryFn: () => api.me(), enabled: status === 'signed-in', staleTime: 60_000, refetchInterval: 30_000 });
   const unread = me.data?.unread_notifications_count ?? 0;
+
+  // The home screen widget follows what the app just learned.
+  useEffect(() => {
+    if (me.data) {
+      refreshStreakWidget();
+    }
+  }, [me.data]);
   const unreadRemotes = me.data?.remotes?.unread_count ?? 0;
   const badgeStyle = { backgroundColor: theme.primary, color: theme.primaryInk, fontFamily: Fonts.mono, fontSize: 11 };
   const accent = user?.lane !== null && user?.lane !== undefined ? laneColor(theme, user.lane) : theme.primary;

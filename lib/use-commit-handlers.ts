@@ -138,6 +138,7 @@ export function useCommitHandlers(): CommitHandlers {
       },
       onDelete: (commit) => remove.mutate(commit),
       onPin: (commit) => pin.mutate(commit),
+      onCard: (commit) => router.push({ pathname: '/card/[id]', params: { id: commit.id } }),
       onOpen: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } }),
       onReply: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id, reply: '1' } }),
       onQuote: (commit) => router.push({ pathname: '/compose', params: { quote: commit.id } }),

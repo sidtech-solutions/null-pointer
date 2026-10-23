@@ -38,6 +38,35 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "# WorkManager (used by the home screen widget) creates its database, workers and input mergers by name; R8 must keep them whole.\n-keep class androidx.work.** { *; }\n-keep class * extends androidx.work.ListenableWorker { *; }\n-keep class * extends androidx.work.InputMerger { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class com.reactnativeandroidwidget.** { *; }"
+          }
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "fonts": ["./assets/fonts/Geist-SemiBold.ttf", "./assets/fonts/Geist-Regular.ttf", "./assets/fonts/GeistMono-Regular.ttf", "./assets/fonts/GeistMono-Medium.ttf"],
+          "widgets": [
+            {
+              "name": "Streak",
+              "label": "Commit streak",
+              "description": "Your streak and the last seven days. Make it taller for your rank, your counts and the newest commits from people you follow.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "maxResizeHeight": "420dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000,
+              "previewImage": "./assets/images/widget-streak-preview.png"
+            }
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-web-browser",
       [

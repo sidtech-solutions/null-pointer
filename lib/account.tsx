@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import type { User } from './types';
+import { clearStreakWidget } from './widgets';
 
 // Signing out forgets the account only; the device key stays in the Keychain.
 const StorageKey = 'devnull.account';
@@ -55,6 +56,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await AsyncStorage.removeItem(StorageKey);
+    clearStreakWidget();
     queryClient.clear();
     setUser(null);
     setStatus('signed-out');

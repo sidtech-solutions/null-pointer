@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import { useRouter } from 'expo-router';
 import { ArrowUpRight, ChevronLeft, ChevronRight, RefreshCw, Smartphone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { Image } from 'expo-image';
 
@@ -23,6 +23,8 @@ import { existingKey, forgetKey } from '@/lib/device-key';
 import { useNow } from '@/lib/now';
 import type { Lane, RemotesFrom } from '@/lib/types';
 import { openLink } from '@/lib/links';
+import { toast } from '@/lib/toast';
+import { offerStreakWidget } from '@/lib/widgets';
 
 const LaneNames = ['Orange', 'Green', 'Violet', 'Teal', 'Rose', 'Ochre'];
 
@@ -288,6 +290,21 @@ export default function SettingsScreen() {
             </>
           )}
         </Section>
+
+        {Platform.OS === 'android' && (
+          <Section>
+            <SettingsHeading title="Home screen" description="A widget with your streak, the last seven days in your lane colour, and what is new. It refreshes when you open the app and about every half hour on its own." />
+            <Button
+              title="Add streak widget"
+              variant="outline"
+              onPress={async () => {
+                if (!(await offerStreakWidget())) {
+                  toast('Long press your home screen, choose Widgets, then null-pointer.');
+                }
+              }}
+            />
+          </Section>
+        )}
 
         <Section>
           <SettingsHeading title="Safety" description="The people you mute and block." />

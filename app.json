@@ -39,6 +39,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": ["text/*", "image/*"],
+          "androidMultiIntentFilters": ["image/*"],
+          "disableIOS": true
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

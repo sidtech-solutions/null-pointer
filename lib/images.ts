@@ -84,6 +84,27 @@ export async function pickImages(source: Source, capacity: number): Promise<Atta
   return prepared;
 }
 
+/** A file another app shared, as the share sheet describes it. */
+export type SharedFile = { path: string; mimeType: string; fileName: string; size: number | null; width: number | null; height: number | null };
+
+/**
+ * The images another app shared, ready to upload: the ones that fit as they
+ * are, the rest re-encoded, anything that is not an image left out.
+ */
+export async function attachmentsFromShared(files: SharedFile[], capacity: number): Promise<Attachment[]> {
+  const prepared: Attachment[] = [];
+
+  for (const file of files.filter((candidate) => candidate.mimeType.toLowerCase().startsWith('image/')).slice(0, Math.max(0, capacity))) {
+    try {
+      prepared.push(await prepare({ uri: file.path, mimeType: file.mimeType, fileName: file.fileName, fileSize: file.size ?? undefined, width: file.width ?? 0, height: file.height ?? 0, type: 'image' } as ImagePicker.ImagePickerAsset));
+    } catch {
+      // A shared file the server would refuse is skipped rather than blocking the rest.
+    }
+  }
+
+  return prepared;
+}
+
 /** Keeps an image the server would accept as it is; re-encodes anything else (HEIC, too large) as JPEG. */
 async function prepare(asset: ImagePicker.ImagePickerAsset): Promise<Attachment> {
   if (asset.type === 'video') {

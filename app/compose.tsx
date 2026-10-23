@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useShareIntentContext } from 'expo-share-intent';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CodeSuggestion, LanguageSheet, useCodePaste } from '@/components/code-tools';
 import { CommitBody } from '@/components/commit-body';
 import { DraftPreview } from '@/components/draft-preview';
 import { MentionSuggestions } from '@/components/mention-suggestions';
@@ -16,6 +18,7 @@ import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
 import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
+import { sharedText, withShared } from '@/lib/share-target';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
 import { refreshStreakWidget } from '@/lib/widgets';
@@ -62,6 +65,13 @@ export default function ComposeScreen() {
     setSelection({ start: next.caret, end: next.caret });
   };
 
+  // Pasted code is offered a fence; the clipboard can be pasted straight in as one.
+  const paste = useCodePaste(body, caret, (text, at) => {
+    setBody(text);
+    setCaret(at);
+    setSelection({ start: at, end: at });
+  });
+
   const quoted = useQuery({
     queryKey: ['commit', quote],
     queryFn: () => api.commit(quote!),
@@ -86,6 +96,31 @@ export default function ComposeScreen() {
       putStash(account.user?.id, stashName, body);
     }
   }, [body, ready, account.user?.id, stashName]);
+
+  // Something another app shared lands here once the stash is back: its text under the draft, its images attached.
+  const share = useShareIntentContext();
+  const { addShared } = attachments;
+
+  useEffect(() => {
+    if (!ready || !share.hasShareIntent) {
+      return;
+    }
+
+    const text = sharedText(share.shareIntent);
+    const files = share.shareIntent.files ?? [];
+
+    share.resetShareIntent();
+
+    if (text !== '') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBody((current) => withShared(current, text));
+      setRestored(false);
+    }
+
+    if (files.length > 0) {
+      addShared(files);
+    }
+  }, [ready, share, addShared]);
 
   const hasImages = attachments.images.length > 0;
   // With images the body may be empty; a poll needs its question. Either way a non-empty body must fit.
@@ -188,10 +223,12 @@ export default function ComposeScreen() {
         )}
       </ScrollView>
 
+      {!previewing && <CodeSuggestion paste={paste} />}
       {!previewing && <MentionSuggestions users={suggestions} onPick={pickMention} />}
+      <LanguageSheet paste={paste} />
 
       <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
-        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)}>
+        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)} onPasteCode={paste.fromClipboard}>
           {restored && (
             <StashLabel
               onDrop={() => {

@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Eye, ImagePlus, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Code, Eye, ImagePlus, Trash2 } from 'lucide-react-native';
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CodeSuggestion, LanguageSheet, useCodePaste } from '@/components/code-tools';
 import { CommitRow } from '@/components/commit-row';
 import { DraftPreview } from '@/components/draft-preview';
 import { AttachmentStrip, BodyCounter, chooseImageSource, StashLabel, ToolbarButton, toUploads, useAttachments } from '@/components/composer';
@@ -66,6 +67,12 @@ export default function CommitScreen() {
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
   };
+
+  const paste = useCodePaste(reply, caret, (text, at) => {
+    setReply(text);
+    setCaret(at);
+    setSelection({ start: at, end: at });
+  });
 
   const thread = useQuery({
     queryKey: ['commit', id],
@@ -245,6 +252,7 @@ export default function CommitScreen() {
 
       {commit && (
         <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
+          {!previewing && <CodeSuggestion paste={paste} />}
           <MentionSuggestions users={suggestions} onPick={pickMention} />
           {error && <Text variant="mono" color={theme.destructive} style={styles.error}>{error}</Text>}
           {!previewing && <AttachmentStrip attachments={attachments} compact />}
@@ -255,6 +263,7 @@ export default function CommitScreen() {
           )}
           <View style={styles.replyRow}>
             <ToolbarButton icon={ImagePlus} label={hasImages && attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per reply` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={previewing || attachments.picking || attachments.images.length >= MaxImages || send.isPending} />
+            <ToolbarButton icon={Code} label="Paste the clipboard as a code block" onPress={paste.fromClipboard} disabled={previewing || send.isPending} />
             <ToolbarButton icon={Eye} label={previewing ? 'Back to writing' : 'Preview'} onPress={() => setPreviewing((current) => !current)} active={previewing} disabled={send.isPending} />
             {previewing ? (
               <View style={styles.replySpacer} />
@@ -296,6 +305,7 @@ export default function CommitScreen() {
           )}
         </View>
       )}
+      <LanguageSheet paste={paste} />
     </KeyboardAvoidingView>
   );
 }

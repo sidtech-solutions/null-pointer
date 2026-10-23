@@ -1,6 +1,7 @@
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname, useRouter } from 'expo-router';
+import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -9,7 +10,7 @@ import 'react-native-reanimated';
 import { applyThemePreference, useTheme } from '@/constants/theme';
 import { ReportSheet } from '@/components/report-sheet';
 import { ToastHost } from '@/components/toast-host';
-import { AccountProvider } from '@/lib/account';
+import { AccountProvider, useAccount } from '@/lib/account';
 import { reportCommit, useReporting } from '@/lib/report-store';
 import { persister, queryClient, SevenDays, wireAppState } from '@/lib/query-client';
 
@@ -51,10 +52,35 @@ export default function RootLayout() {
   return (
     <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: SevenDays }}>
       <AccountProvider>
-        <RootLayoutNav />
+        <ShareIntentProvider>
+          <ShareTarget />
+          <RootLayoutNav />
+        </ShareIntentProvider>
       </AccountProvider>
     </PersistQueryClientProvider>
   );
+}
+
+/** A share that arrives while the app is open goes to the composer, which takes it from there. */
+function ShareTarget() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { status } = useAccount();
+  const { hasShareIntent, resetShareIntent } = useShareIntentContext();
+
+  useEffect(() => {
+    if (!hasShareIntent) {
+      return;
+    }
+
+    if (status === 'signed-out') {
+      resetShareIntent();
+    } else if (status === 'signed-in' && pathname !== '/compose') {
+      router.push('/compose');
+    }
+  }, [hasShareIntent, status, pathname, router, resetShareIntent]);
+
+  return null;
 }
 
 function RootLayoutNav() {

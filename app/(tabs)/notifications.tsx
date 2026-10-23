@@ -1,8 +1,9 @@
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import PagerView from 'react-native-pager-view';
 
 import { DayMarker } from '@/components/day-marker';
 import { EmptyState } from '@/components/empty-state';
@@ -31,26 +32,78 @@ type Row = { type: 'day'; key: string; label: string } | { type: 'notification';
 
 type Group = { items: Notification[]; hasMore: boolean; cursor: string | null; failed: boolean };
 
+/**
+ * The filters are pages you swipe between, as on the Log. Only the page showing
+ * asks devnull, since every listing marks everything read.
+ */
 export default function NotificationsScreen() {
+  const theme = useTheme();
+  const focused = useIsFocused();
+  const pager = useRef<PagerView>(null);
+  const strip = useRef<ComponentRef<typeof ScrollView>>(null);
+  const filterX = useRef<number[]>([]);
+  const [index, setIndex] = useState(0);
+
+  // The strip scrolls so the filter you land on is in view.
+  useEffect(() => {
+    const x = filterX.current[index];
+
+    if (x !== undefined) {
+      strip.current?.scrollTo({ x: Math.max(0, x - 48), animated: true });
+    }
+  }, [index]);
+
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.surface }]}>
+      <Header title="Notifications" />
+      <View style={[styles.filters, { borderBottomColor: theme.hairline, backgroundColor: theme.surface }]}>
+        <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {Types.map((option, position) => (
+            <Pressable
+              key={option.key}
+              onPress={() => pager.current?.setPage(position)}
+              onLayout={(event) => {
+                filterX.current[position] = event.nativeEvent.layout.x;
+              }}
+              style={styles.filter}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: position === index }}>
+              <Text variant="nav" muted={position !== index}>{option.label}</Text>
+              <View style={[styles.underline, { backgroundColor: position === index ? theme.primary : 'transparent' }]} />
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      <PagerView ref={pager} style={styles.pager} initialPage={0} onPageSelected={(event) => setIndex(event.nativeEvent.position)}>
+        {Types.map((option, position) => (
+          <View key={option.key} style={styles.page}>
+            <NotificationsPage type={option.key} empty={option.empty} active={focused && position === index} onShowAll={() => pager.current?.setPage(0)} />
+          </View>
+        ))}
+      </PagerView>
+    </View>
+  );
+}
+
+function NotificationsPage({ type, empty, active, onShowAll }: { type: string; empty: string; active: boolean; onShowAll: () => void }) {
   const theme = useTheme();
   const router = useRouter();
   const account = useAccount();
   const queryClient = useQueryClient();
   const now = useNow();
-  const focused = useIsFocused();
-  const [type, setType] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState<Record<string, Group | null>>({});
-  // Listing marks everything read on devnull, so "new" is judged against the previous load of each filter here.
-  const seen = useRef<Record<string, { since: number; latest: number; updatedAt: number; pages: number }>>({});
+  // Listing marks everything read on devnull, so "new" is judged against the previous load of this filter here.
+  const seen = useRef<{ since: number; latest: number; updatedAt: number; pages: number } | undefined>(undefined);
 
   const query = useInfiniteQuery({
     queryKey: ['notifications', type],
     queryFn: ({ pageParam }) => api.notifications(type, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => nextCursor(last),
-    // Only while the tab is showing: a background refetch would mark everything read unseen.
-    enabled: account.status === 'signed-in' && focused,
+    // Only while the page is showing: a background refetch would mark everything read unseen.
+    enabled: account.status === 'signed-in' && active,
   });
 
   // Every listing, not only the first, marks everything read on the server, so
@@ -58,19 +111,19 @@ export default function NotificationsScreen() {
   useEffect(() => {
     const updatedAt = query.dataUpdatedAt;
     const pages = query.data?.pages.length ?? 0;
-    const previous = seen.current[type];
+    const previous = seen.current;
 
     if (updatedAt === 0 || previous?.updatedAt === updatedAt) {
       return;
     }
 
     const paged = previous !== undefined && pages > previous.pages;
-    seen.current[type] = paged ? { ...previous, updatedAt, pages } : { since: previous?.latest ?? updatedAt, latest: updatedAt, updatedAt, pages };
+    seen.current = paged ? { ...previous, updatedAt, pages } : { since: previous?.latest ?? updatedAt, latest: updatedAt, updatedAt, pages };
 
     if (query.isFetchedAfterMount) {
       queryClient.setQueryData(['me'], (me: CurrentUser | undefined) => (me && me.unread_notifications_count !== 0 ? { ...me, unread_notifications_count: 0 } : me));
     }
-  }, [query.dataUpdatedAt, query.data, query.isFetchedAfterMount, type, queryClient]);
+  }, [query.dataUpdatedAt, query.data, query.isFetchedAfterMount, queryClient]);
 
   useEffect(() => {
     if (query.error instanceof Unauthenticated) {
@@ -100,24 +153,21 @@ export default function NotificationsScreen() {
     return out;
   }, [notifications, now]);
 
-  const isNew = useCallback(
-    (notification: Notification): boolean => {
-      const since = seen.current[type]?.since;
+  const isNew = useCallback((notification: Notification): boolean => {
+    const since = seen.current?.since;
 
-      if (since === undefined) {
-        return false;
-      }
+    if (since === undefined) {
+      return false;
+    }
 
-      if ((notification.unread_count ?? 0) > 0 || notification.read_at === null) {
-        return true;
-      }
+    if ((notification.unread_count ?? 0) > 0 || notification.read_at === null) {
+      return true;
+    }
 
-      const read = notification.read_at ? Date.parse(notification.read_at) : NaN;
+    const read = notification.read_at ? Date.parse(notification.read_at) : NaN;
 
-      return !Number.isNaN(read) && read >= since - 60_000;
-    },
-    [type],
-  );
+    return !Number.isNaN(read) && read >= since - 60_000;
+  }, []);
 
   const loadGroup = useCallback(
     async (notification: Notification, older = false) => {
@@ -173,6 +223,7 @@ export default function NotificationsScreen() {
 
   const refresh = async () => {
     setRefreshing(true);
+    setOpen({});
 
     try {
       await query.refetch();
@@ -181,68 +232,47 @@ export default function NotificationsScreen() {
     }
   };
 
-  const changeType = (next: string) => {
-    setType(next);
-    setOpen({});
-  };
-
-  const active = Types.find((option) => option.key === type) ?? Types[0];
-
   return (
-    <View style={[styles.screen, { backgroundColor: theme.surface }]}>
-      <Header title="Notifications" />
-      <View style={[styles.filters, { borderBottomColor: theme.hairline, backgroundColor: theme.surface }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {Types.map((option) => (
-            <Pressable key={option.key} onPress={() => changeType(option.key)} style={styles.filter} accessibilityRole="tab" accessibilityState={{ selected: option.key === type }}>
-              <Text variant="nav" muted={option.key !== type}>{option.label}</Text>
-              <View style={[styles.underline, { backgroundColor: option.key === type ? theme.primary : 'transparent' }]} />
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      <FlashList
-        data={rows}
-        keyExtractor={(row) => row.key}
-        getItemType={(row) => row.type}
-        renderItem={({ item }) =>
-          item.type === 'day' ? (
-            <DayMarker label={item.label} />
-          ) : (
-            <NotificationRow
-              notification={item.notification}
-              isNew={isNew(item.notification)}
-              hasPrevious={item.hasPrevious}
-              open={item.notification.id in open}
-              group={open[item.notification.id]}
-              onPress={openNotification}
-              onToggleGroup={toggleGroup}
-              onOpenItem={openNotification}
-              onLoadOlder={(notification) => loadGroup(notification, true)}
-              onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.username } })}
-            />
-          )
+    <FlashList
+      data={rows}
+      keyExtractor={(row) => row.key}
+      getItemType={(row) => row.type}
+      renderItem={({ item }) =>
+        item.type === 'day' ? (
+          <DayMarker label={item.label} />
+        ) : (
+          <NotificationRow
+            notification={item.notification}
+            isNew={isNew(item.notification)}
+            hasPrevious={item.hasPrevious}
+            open={item.notification.id in open}
+            group={open[item.notification.id]}
+            onPress={openNotification}
+            onToggleGroup={toggleGroup}
+            onOpenItem={openNotification}
+            onLoadOlder={(notification) => loadGroup(notification, true)}
+            onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.username } })}
+          />
+        )
+      }
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetchingNextPage) {
+          query.fetchNextPage();
         }
-        onEndReached={() => {
-          if (query.hasNextPage && !query.isFetchingNextPage) {
-            query.fetchNextPage();
-          }
-        }}
-        onEndReachedThreshold={0.6}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.inkMuted} />}
-        ListEmptyComponent={
-          query.isPending ? null : query.isError ? (
-            <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
-          ) : (
-            <EmptyState fatal={type === 'all' ? '$ cat /dev/notifications' : `$ cat /dev/notifications | grep ${type}`} action={type === 'all' ? undefined : 'All notifications'} onAction={() => changeType('all')}>
-              {active.empty}
-            </EmptyState>
-          )
-        }
-        ListFooterComponent={notifications.length > 0 && !query.hasNextPage ? <RootRow>That’s the oldest notification. There’s nothing before it.</RootRow> : null}
-      />
-    </View>
+      }}
+      onEndReachedThreshold={0.6}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.inkMuted} />}
+      ListEmptyComponent={
+        query.isPending ? null : query.isError ? (
+          <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
+        ) : (
+          <EmptyState fatal={type === 'all' ? '$ cat /dev/notifications' : `$ cat /dev/notifications | grep ${type}`} action={type === 'all' ? undefined : 'All notifications'} onAction={onShowAll}>
+            {empty}
+          </EmptyState>
+        )
+      }
+      ListFooterComponent={notifications.length > 0 && !query.hasNextPage ? <RootRow>That’s the oldest notification. There’s nothing before it.</RootRow> : null}
+    />
   );
 }
 
@@ -252,4 +282,6 @@ const styles = StyleSheet.create({
   filterRow: { paddingHorizontal: Space.gutter - 8 },
   filter: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 12, gap: 8 },
   underline: { height: 3, alignSelf: 'stretch', borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  pager: { flex: 1 },
+  page: { flex: 1 },
 });

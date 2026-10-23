@@ -24,6 +24,8 @@ const ActivePoll = 1_500;
 const IdlePoll = 4_000;
 const ActiveWindow = 60_000;
 const TypingPing = 3_000;
+const LinkCardPoll = 3_000;
+const LinkCardTries = 10;
 
 export function threadQueryKey(target: RemoteTarget): readonly ['remote-thread', string] {
   return ['remote-thread', targetKey(target)];
@@ -136,6 +138,37 @@ export function useThread(target: RemoteTarget, active: boolean) {
       clearTimeout(timer);
     };
   }, [active, loaded, queryKey, queryClient, absorb]);
+
+  // A link card the server is still fetching is asked for again, a few times, as the web does.
+  const pendingCards = useRef(new Map<number, number>());
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const waiting = (query.data?.messages ?? []).filter((message) => message.link_preview?.is_pending === true && (pendingCards.current.get(message.id) ?? 0) < LinkCardTries);
+
+    if (waiting.length === 0) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      for (const message of waiting) {
+        pendingCards.current.set(message.id, (pendingCards.current.get(message.id) ?? 0) + 1);
+
+        try {
+          const card = await api.messageLinkPreview(message.id);
+
+          patch((thread) => ({ ...thread, messages: thread.messages.map((candidate) => (candidate.id === message.id ? { ...candidate, link_preview: card } : candidate)) }));
+        } catch {
+          // The next poll of the thread may bring it; otherwise the message keeps its link as text.
+        }
+      }
+    }, LinkCardPoll);
+
+    return () => clearTimeout(timer);
+  }, [active, query.data, patch]);
 
   const deliver = useCallback(
     async (message: PendingMessage) => {

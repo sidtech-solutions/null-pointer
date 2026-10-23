@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Sc
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitBody } from '@/components/commit-body';
+import { DraftPreview } from '@/components/draft-preview';
 import { MentionSuggestions } from '@/components/mention-suggestions';
 import { AttachmentStrip, BodyCounter, ComposerInput, ComposerToolbar, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
@@ -32,6 +33,7 @@ export default function ComposeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [poll, setPoll] = useState<NewPoll | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
   const [caret, setCaret] = useState(0);
@@ -148,28 +150,32 @@ export default function ComposeScreen() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body} style={styles.scroll}>
         {error && <Text variant="small" color={theme.destructive}>{error}</Text>}
 
-        <ComposerInput
-          value={body}
-          onChangeText={(text) => {
-            setBody(text);
-            if (text === '') {
-              setRestored(false);
-            }
-          }}
-          onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
-          selection={selection}
-          placeholder={quote ? 'Add your take' : poll ? 'Ask a question' : hasImages ? 'Say something about it (optional)' : 'What did you ship?'}
-          autoFocus
-          editable={!busy}
-          accessibilityLabel="Your commit"
-          style={styles.input}
-        />
+        {previewing ? (
+          <DraftPreview body={body} author={account.user} images={attachments.images} poll={poll} quoted={quoted.data?.commit ?? null} onOpenMention={(username) => router.push({ pathname: '/users/[username]', params: { username } })} />
+        ) : (
+          <ComposerInput
+            value={body}
+            onChangeText={(text) => {
+              setBody(text);
+              if (text === '') {
+                setRestored(false);
+              }
+            }}
+            onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+            selection={selection}
+            placeholder={quote ? 'Add your take' : poll ? 'Ask a question' : hasImages ? 'Say something about it (optional)' : 'What did you ship?'}
+            autoFocus
+            editable={!busy}
+            accessibilityLabel="Your commit"
+            style={styles.input}
+          />
+        )}
 
-        <AttachmentStrip attachments={attachments} />
+        {!previewing && <AttachmentStrip attachments={attachments} />}
 
-        {poll && <PollEditor poll={poll} onChange={setPoll} onRemove={() => setPoll(null)} />}
+        {poll && !previewing && <PollEditor poll={poll} onChange={setPoll} onRemove={() => setPoll(null)} />}
 
-        {quoted.data && (
+        {quoted.data && !previewing && (
           <View style={[styles.quoted, { borderColor: theme.hairline }]}>
             <View style={styles.quotedHeader}>
               <Text variant="name" numberOfLines={1} style={styles.quotedName}>{quoted.data.commit.author?.name || handle}</Text>
@@ -180,10 +186,10 @@ export default function ComposeScreen() {
         )}
       </ScrollView>
 
-      <MentionSuggestions users={suggestions} onPick={pickMention} />
+      {!previewing && <MentionSuggestions users={suggestions} onPick={pickMention} />}
 
       <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
-        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote}>
+        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)}>
           {restored && (
             <StashLabel
               onDrop={() => {

@@ -4,30 +4,60 @@ import { StyleSheet, Text as NativeText, View } from 'react-native';
 import { Text } from '@/components/text';
 import { Fonts, Radius, useTheme } from '@/constants/theme';
 import type { BodySegment, Commit } from '@/lib/types';
+import { hrefFor, linkLabel, type LinkTarget, linkTarget, UrlPattern, withoutTrailingPunctuation } from '@/lib/urls';
 
-type Run = { kind: 'text' | 'link' | 'mention' | 'wordmark' | 'code'; text: string };
+type Run = { kind: 'text' | 'mention' | 'wordmark' | 'code'; text: string } | { kind: 'link'; text: string; href: string; target: LinkTarget };
 
 type Block = { kind: 'paragraph'; runs: Run[] } | { kind: 'code'; code: string; language: string | null };
 
-const Pattern = /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|((?<![\w.\/-])@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)|((?<![\p{L}\p{M}\p{N}_.\/-])\/dev\/null(?![\p{L}\p{M}\p{N}_\/-]))/gu;
+const MentionOrWordmark = /((?<![\w.\/-])@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)|((?<![\p{L}\p{M}\p{N}_.\/-])\/dev\/null(?![\p{L}\p{M}\p{N}_\/-]))/gu;
 
-function runsOf(text: string): Run[] {
+function proseRuns(text: string): Run[] {
   const runs: Run[] = [];
   let last = 0;
 
-  for (const match of text.matchAll(Pattern)) {
+  for (const match of text.matchAll(MentionOrWordmark)) {
     const index = match.index ?? 0;
 
     if (index > last) {
       runs.push({ kind: 'text', text: text.slice(last, index) });
     }
 
-    runs.push({ kind: match[1] ? 'link' : match[2] ? 'mention' : 'wordmark', text: match[0] });
+    runs.push({ kind: match[1] ? 'mention' : 'wordmark', text: match[0] });
     last = index + match[0].length;
   }
 
   if (last < text.length) {
     runs.push({ kind: 'text', text: text.slice(last) });
+  }
+
+  return runs;
+}
+
+// Links first, as the server finds them, then mentions and wordmarks in the prose between them.
+function runsOf(text: string): Run[] {
+  const runs: Run[] = [];
+  let last = 0;
+
+  for (const match of text.matchAll(UrlPattern)) {
+    const index = match.index ?? 0;
+    const linkText = withoutTrailingPunctuation(match[0]);
+    const href = hrefFor(linkText);
+
+    if (href === null || linkText === '') {
+      continue;
+    }
+
+    if (index > last) {
+      runs.push(...proseRuns(text.slice(last, index)));
+    }
+
+    runs.push({ kind: 'link', text: linkText, href, target: linkTarget(href) });
+    last = index + linkText.length;
+  }
+
+  if (last < text.length) {
+    runs.push(...proseRuns(text.slice(last)));
   }
 
   return runs;
@@ -105,10 +135,16 @@ export const CommitBody = memo(function CommitBody({
             {block.runs.map((run, runIndex) => {
               switch (run.kind) {
                 case 'link':
-                  return (
-                    <Text key={runIndex} color={theme.primary} style={{ fontSize: size, lineHeight }} onPress={onOpenLink ? () => onOpenLink(run.text) : undefined}>
-                      {run.text}
+                  // A dev/null commit or a GitHub repository, issue or pull request shows as a mono name with its owner muted, as on the web.
+                  return run.target.kind === 'web' || run.target.kind === 'profile' ? (
+                    <Text key={runIndex} color={theme.primary} style={{ fontSize: size, lineHeight }} onPress={onOpenLink ? () => onOpenLink(run.href) : undefined} accessibilityLabel={run.href}>
+                      {linkLabel(run.href)}
                     </Text>
+                  ) : (
+                    <NativeText key={runIndex} style={{ fontFamily: Fonts.mono, fontSize: size - 1, lineHeight, color: theme.primary }} onPress={onOpenLink ? () => onOpenLink(run.href) : undefined} accessibilityLabel={run.href} suppressHighlighting>
+                      <NativeText style={{ color: theme.inkMuted }}>{run.target.kind === 'commit' ? `${run.target.username}/` : `${run.target.owner}/`}</NativeText>
+                      {run.target.kind === 'commit' ? run.target.id.slice(0, 7) : `${run.target.repository}${run.target.number ? `#${run.target.number}` : ''}`}
+                    </NativeText>
                   );
                 case 'mention':
                   return (

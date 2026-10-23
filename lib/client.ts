@@ -2,7 +2,7 @@ import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Candidate, Commit, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
+import type { Candidate, Commit, CommitPreview, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, LinkPreview, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -272,6 +272,11 @@ export const api = {
     await send('POST', `remotes/@${encode(username)}/drop`);
   },
 
+  /** A message's link card, asked for again while the server is still fetching it. */
+  async messageLinkPreview(messageId: number): Promise<LinkPreview | null> {
+    return (await send('GET', `remotes/messages/${encode(String(messageId))}/link-preview`)).link_preview ?? null;
+  },
+
   async reactionUsage(): Promise<ReactionUsage[]> {
     const json = await send('GET', 'remotes/reactions');
 
@@ -404,6 +409,20 @@ export const api = {
   /** Votes are final. Answers with the commit, its poll now showing results. */
   async votePoll(commitId: string, optionId: string): Promise<Commit> {
     return (await send('POST', `commits/${encode(commitId)}/poll/votes`, {}, { option: optionId })).data;
+  },
+
+  /** A draft as the commit it would become: the body as it would be kept, its segments, and its mentions. Nothing is stored. */
+  async previewCommit(body: string): Promise<CommitPreview> {
+    return (await send('POST', 'commits/preview', {}, { body })).data;
+  },
+
+  /** Pins one of the user's own top-level commits to their profile, replacing any pin before it. Answers with the commit. */
+  async pin(id: string): Promise<Commit> {
+    return (await send('PUT', `commits/${encode(id)}/pin`)).data;
+  },
+
+  async unpin(id: string): Promise<Commit> {
+    return (await send('DELETE', `commits/${encode(id)}/pin`)).data;
   },
 
   starred(cursor?: string | null): Promise<Page<Commit>> {

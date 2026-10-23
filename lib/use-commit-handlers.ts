@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type InfiniteData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Alert } from 'react-native';
@@ -10,7 +10,7 @@ import { shortHash } from '@/lib/display';
 import { tap } from '@/lib/haptics';
 import { reportCommit } from '@/lib/report-store';
 import { toast } from '@/lib/toast';
-import type { Commit } from '@/lib/types';
+import type { Commit, Page, Profile } from '@/lib/types';
 
 import { useAccount } from './account';
 
@@ -67,6 +67,37 @@ export function useCommitHandlers(): CommitHandlers {
     },
   });
 
+  // Pinning needs PUT commits/{id}/pin, which dev-null.sh may not serve yet; a 404 says so instead of failing quietly.
+  const pin = useMutation({
+    mutationFn: (commit: Commit) => (commit.is_pinned ? api.unpin(commit.id) : api.pin(commit.id)),
+    onSuccess: (updated, commit) => {
+      const pinned = updated?.is_pinned ?? !commit.is_pinned;
+
+      queryClient.setQueriesData<Profile>({ queryKey: ['profile', account.user?.username] }, (profile) => (profile ? { ...profile, pinned_commit: pinned ? { ...commit, is_pinned: true } : profile.pinned_commit?.id === commit.id ? null : profile.pinned_commit } : profile));
+      patchCommit(queryClient, commit.id, (c) => ({ ...c, is_pinned: pinned }));
+
+      if (pinned) {
+        // Only one commit is pinned at a time, so any other copy marked pinned is stale.
+        queryClient.setQueriesData<InfiniteData<Page<Commit>>>({ queryKey: ['user-commits', account.user?.username] }, (data) =>
+          data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((c) => (c.id !== commit.id && c.is_pinned ? { ...c, is_pinned: false } : c)) })) } : data,
+        );
+      }
+
+      toast(pinned ? `Pinned ${commit.short_hash || shortHash(commit.id)} to your profile.` : `Unpinned ${commit.short_hash || shortHash(commit.id)}.`);
+      queryClient.invalidateQueries({ queryKey: ['profile', account.user?.username] });
+    },
+    onError: (error) => {
+      // Production answers 405 to a route it does not have yet; a 404 would mean the commit is gone.
+      if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
+        toast('Pinning from the app needs a newer dev-null.sh.');
+
+        return;
+      }
+
+      failed(error);
+    },
+  });
+
   const pastel = useMutation({
     mutationFn: (commit: Commit) => api.givePastel(commit.id),
     onMutate: (commit) => {
@@ -106,6 +137,7 @@ export function useCommitHandlers(): CommitHandlers {
         vote.mutate({ commit, optionId });
       },
       onDelete: (commit) => remove.mutate(commit),
+      onPin: (commit) => pin.mutate(commit),
       onOpen: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } }),
       onReply: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id, reply: '1' } }),
       onQuote: (commit) => router.push({ pathname: '/compose', params: { quote: commit.id } }),

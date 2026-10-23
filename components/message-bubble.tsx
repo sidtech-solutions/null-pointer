@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { CornerUpLeft } from 'lucide-react-native';
-import { memo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { CommitBody } from '@/components/commit-body';
@@ -96,9 +96,59 @@ function LinkCard({ preview, width }: { preview: LinkPreview; width: number }) {
 export type BubbleHandlers = {
   onLongPress?: (message: Message) => void;
   onToggleReaction?: (message: Message, emoji: string) => void;
+  /** Two quick taps on the bubble, which toggle a heart on the web. */
+  onDoubleTap?: (message: Message) => void;
+  /** A sideways swipe toward the middle of the screen, which replies on the web's touch screens. */
+  onSwipeReply?: (message: Message) => void;
   onOpenReply?: (id: number) => void;
   onOpenAuthor?: (user: User) => void;
 };
+
+const DoubleTapWithin = 300;
+const SwipeToReply = 56;
+const SwipeStart = 12;
+
+/** Slides the bubble as the finger drags it sideways, and calls back once it has gone far enough. */
+function useSwipeToReply(mine: boolean, onSwipe: (() => void) | undefined) {
+  const [offset] = useState(() => new Animated.Value(0));
+  const latest = useRef(onSwipe);
+  const enabled = onSwipe !== undefined;
+
+  useEffect(() => {
+    latest.current = onSwipe;
+  }, [onSwipe]);
+
+  // The responder is built once per direction and reads the latest callback
+  // through the ref. Its callbacks run on touches, never during render, which
+  // the hooks lint cannot see from here.
+  /* eslint-disable react-hooks/refs, react-hooks/immutability */
+  const responder = useMemo(() => {
+    const direction = mine ? -1 : 1;
+    let fired = false;
+
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) => latest.current !== undefined && gesture.dx * direction > SwipeStart && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2,
+      onPanResponderGrant: () => {
+        fired = false;
+      },
+      onPanResponderMove: (_event, gesture) => {
+        const along = Math.max(0, gesture.dx * direction);
+        offset.setValue(Math.min(along, SwipeToReply + (along - SwipeToReply) / 4) * direction);
+
+        if (!fired && along >= SwipeToReply) {
+          fired = true;
+          latest.current?.();
+        }
+      },
+      onPanResponderRelease: () => Animated.spring(offset, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(),
+      onPanResponderTerminate: () => Animated.spring(offset, { toValue: 0, useNativeDriver: true }).start(),
+      onPanResponderTerminationRequest: () => true,
+    });
+  }, [mine, offset]);
+  /* eslint-enable react-hooks/refs, react-hooks/immutability */
+
+  return { offset, handlers: enabled ? responder.panHandlers : {} };
+}
 
 /**
  * One message: the writer's own on the right in their color, everyone else's
@@ -130,9 +180,22 @@ export const MessageBubble = memo(function MessageBubble({
   const inkOnBubble = mine ? theme.primaryInk : theme.ink;
   const hasBody = message.body.trim() !== '';
   const hasMedia = (message.images?.length ?? 0) > 0;
+  const lastTap = useRef(0);
+  const swipe = useSwipeToReply(mine, handlers.onSwipeReply ? () => handlers.onSwipeReply?.(message) : undefined);
+
+  const tapped = () => {
+    const now = Date.now();
+
+    if (handlers.onDoubleTap && now - lastTap.current < DoubleTapWithin) {
+      lastTap.current = 0;
+      handlers.onDoubleTap(message);
+    } else {
+      lastTap.current = now;
+    }
+  };
 
   return (
-    <View style={[styles.wrap, mine ? styles.wrapMine : styles.wrapTheirs]}>
+    <Animated.View style={[styles.wrap, mine ? styles.wrapMine : styles.wrapTheirs, { transform: [{ translateX: swipe.offset }] }]} {...swipe.handlers}>
       {showsAuthor && !mine && author && (
         <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(author) : undefined} style={styles.author} hitSlop={6}>
           <Avatar user={author} size={20} />
@@ -141,11 +204,12 @@ export const MessageBubble = memo(function MessageBubble({
       )}
 
       <Pressable
+        onPress={handlers.onDoubleTap ? tapped : undefined}
         onLongPress={handlers.onLongPress ? () => handlers.onLongPress?.(message) : undefined}
         delayLongPress={300}
         style={({ pressed }) => [styles.bubble, { maxWidth: bubbleWidth + 24, backgroundColor: mine ? theme.primary : theme.wash }, mine ? styles.bubbleMine : styles.bubbleTheirs, pressed && styles.pressed]}
         accessibilityLabel={`${mine ? 'You' : author ? `@${author.username}` : 'Message'}: ${messageGist(message)}, ${timeOf(message.created_at)}`}
-        accessibilityHint="Long press for reactions and reply">
+        accessibilityHint={handlers.onDoubleTap ? 'Long press for reactions and reply, double tap for a heart' : 'Long press for reactions and reply'}>
         {message.reply_to && <ReplyGhost reply={message.reply_to} authors={authors} tint={mine ? theme.primaryInk : theme.primary} onPress={handlers.onOpenReply ? () => handlers.onOpenReply?.(message.reply_to!.id) : undefined} />}
         {hasMedia && <Images images={message.images!} width={Math.min(bubbleWidth, 280)} />}
         {hasBody ? (
@@ -157,7 +221,7 @@ export const MessageBubble = memo(function MessageBubble({
         ) : !hasMedia ? (
           <Text variant="small" color={inkOnBubble} style={styles.voice}>Voice note · listen on dev-null.sh</Text>
         ) : null}
-        {message.link_preview?.url && !mine ? <LinkCard preview={message.link_preview} width={Math.min(bubbleWidth, 280)} /> : null}
+        {message.link_preview?.url && !message.link_preview.is_pending ? <LinkCard preview={message.link_preview} width={Math.min(bubbleWidth, 280)} /> : null}
         <View style={styles.meta}>
           <Text variant="mono" color={inkOnBubble} style={[styles.time, mine && styles.timeMine]}>{timeOf(message.created_at)}</Text>
           {mine && pulled && <Text variant="mono" color={theme.primaryInk} style={[styles.time, styles.timeMine]}>· pulled</Text>}
@@ -179,7 +243,7 @@ export const MessageBubble = memo(function MessageBubble({
           ))}
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 });
 

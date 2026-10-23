@@ -33,9 +33,23 @@ import { type PendingMessage, useThread } from '@/lib/use-thread';
 
 type Row =
   | { type: 'day'; key: string; label: string }
+  | { type: 'head'; key: string; count: number }
   | { type: 'event'; key: string; message: Message }
   | { type: 'message'; key: string; message: Message; mine: boolean; showsAuthor: boolean; pulled: boolean }
   | { type: 'pending'; key: string; message: PendingMessage };
+
+/** Where you left off: above the first message from someone else since you last pulled, as the web's HEAD line. */
+function HeadLine({ count }: { count: number }) {
+  const theme = useTheme();
+
+  return (
+    <View style={styles.head} accessibilityLabel={`${count} new ${count === 1 ? 'message' : 'messages'} below`}>
+      <View style={[styles.headRule, { backgroundColor: theme.primary }]} />
+      <Text variant="mono" color={theme.primary} style={styles.dayText}>HEAD · {count > 99 ? '99+' : count} new</Text>
+      <View style={[styles.headRule, { backgroundColor: theme.primary }]} />
+    </View>
+  );
+}
 
 function DayLine({ label }: { label: string }) {
   return (
@@ -130,12 +144,27 @@ export default function ThreadScreen() {
     return map;
   }, [me, partner, members, data?.messages]);
 
+  // Where you had pulled to, and the latest message, when the thread opened: HEAD stays put while you read.
+  const [head, setHead] = useState<{ through: number; until: number } | null>(null);
+
+  useEffect(() => {
+    if (head === null && data) {
+      // Noted once from the first page, so a later pull does not move the marker.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setHead({ through: data.read_through_id, until: data.messages.at(-1)?.id ?? 0 });
+    }
+  }, [head, data]);
+
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
     let previousDay: string | null = null;
     let previousAuthor: string | null = null;
     const partnerRead = data?.kind === 'direct' ? data.partner_read_through_id : 0;
     const lastMine = [...(data?.messages ?? [])].reverse().find((message) => !message.event && isMine(message, me));
+    const marker = head;
+    const unread = marker ? (data?.messages ?? []).filter((message) => message.id > marker.through && message.id <= marker.until && !message.event && !isMine(message, me)) : [];
+    // As on the web, HEAD only shows when you had read something above it.
+    const headAt = unread.length > 0 && data?.messages[0]?.id !== unread[0].id ? unread[0].id : null;
 
     for (const message of data?.messages ?? []) {
       const day = dayKey(message.created_at);
@@ -143,6 +172,11 @@ export default function ThreadScreen() {
       if (day !== previousDay) {
         out.push({ type: 'day', key: `day-${day}`, label: dayLabel(message.created_at, now) });
         previousDay = day;
+        previousAuthor = null;
+      }
+
+      if (message.id === headAt) {
+        out.push({ type: 'head', key: 'head', count: unread.length });
         previousAuthor = null;
       }
 
@@ -160,7 +194,7 @@ export default function ThreadScreen() {
     thread.pending.forEach((message) => out.push({ type: 'pending', key: `p-${message.client_id}`, message }));
 
     return out;
-  }, [data, me, now, thread.pending]);
+  }, [data, me, now, thread.pending, head]);
 
   const latestId = data?.messages.at(-1)?.id ?? 0;
 
@@ -310,14 +344,19 @@ export default function ThreadScreen() {
     [react],
   );
 
+  const replyToMessage = useCallback((message: Message) => setReplyTo({ id: message.id, user_id: message.user_id, body: message.body, images_count: message.images?.length ?? 0 }), []);
+
   const handlers = useMemo(
     () => ({
       onLongPress: (message: Message) => setActing(message),
       onToggleReaction: open ? toggleReaction : undefined,
+      // A double tap toggles a heart, and a swipe toward the middle replies, as on the web's touch screens.
+      onDoubleTap: open ? (message: Message) => toggleReaction(message, '❤️') : undefined,
+      onSwipeReply: open ? replyToMessage : undefined,
       onOpenReply: scrollToMessage,
       onOpenAuthor: openAuthor,
     }),
-    [open, toggleReaction, scrollToMessage, openAuthor],
+    [open, toggleReaction, replyToMessage, scrollToMessage, openAuthor],
   );
 
   const render = useCallback(
@@ -325,6 +364,8 @@ export default function ThreadScreen() {
       switch (item.type) {
         case 'day':
           return <DayLine label={item.label} />;
+        case 'head':
+          return <HeadLine count={item.count} />;
         case 'event':
           return <EventLine message={item.message} me={me} />;
         case 'message':
@@ -453,7 +494,7 @@ export default function ThreadScreen() {
         canReact={open && acting?.event == null}
         canReply={open}
         onReact={toggleReaction}
-        onReply={(message) => setReplyTo({ id: message.id, user_id: message.user_id, body: message.body, images_count: message.images?.length ?? 0 })}
+        onReply={replyToMessage}
         onClose={() => setActing(null)}
       />
 
@@ -504,6 +545,8 @@ const styles = StyleSheet.create({
   older: { paddingVertical: 12, alignItems: 'center' },
   loading: { paddingVertical: 48, alignItems: 'center' },
   day: { alignItems: 'center', paddingVertical: 10 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: Space.gutter, paddingVertical: 8 },
+  headRule: { flex: 1, height: StyleSheet.hairlineWidth, opacity: 0.6 },
   dayText: { fontSize: 11, lineHeight: 14 },
   bottom: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter - 4, paddingTop: 6, gap: 6 },
   typing: { fontSize: 12, lineHeight: 16, paddingHorizontal: 8 },

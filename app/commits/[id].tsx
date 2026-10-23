@@ -1,11 +1,12 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, ImagePlus, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Eye, ImagePlus, Trash2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitRow } from '@/components/commit-row';
+import { DraftPreview } from '@/components/draft-preview';
 import { AttachmentStrip, BodyCounter, chooseImageSource, StashLabel, ToolbarButton, toUploads, useAttachments } from '@/components/composer';
 import { MentionSuggestions } from '@/components/mention-suggestions';
 import { MaxImages } from '@/lib/images';
@@ -37,6 +38,7 @@ export default function CommitScreen() {
   const [restored, setRestored] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
   const [caret, setCaret] = useState(0);
@@ -113,6 +115,7 @@ export default function CommitScreen() {
       setReply('');
       setRestored(false);
       setError(null);
+      setPreviewing(false);
       attachments.clear();
       queryClient.setQueryData<{ pages: Page<Commit>[]; pageParams: unknown[] }>(['replies', id], (data) =>
         data && data.pages.length > 0 ? { ...data, pages: [...data.pages.slice(0, -1), { ...data.pages[data.pages.length - 1], data: [...data.pages[data.pages.length - 1].data, created] }] } : { pages: [{ data: [created] }], pageParams: [null] },
@@ -239,27 +242,37 @@ export default function CommitScreen() {
         <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
           <MentionSuggestions users={suggestions} onPick={pickMention} />
           {error && <Text variant="mono" color={theme.destructive} style={styles.error}>{error}</Text>}
-          <AttachmentStrip attachments={attachments} compact />
+          {!previewing && <AttachmentStrip attachments={attachments} compact />}
+          {previewing && (
+            <ScrollView style={styles.replyPreview} contentContainerStyle={styles.replyPreviewContent} keyboardShouldPersistTaps="handled">
+              <DraftPreview body={reply} author={account.user} images={attachments.images} onOpenMention={(username) => router.push({ pathname: '/users/[username]', params: { username } })} />
+            </ScrollView>
+          )}
           <View style={styles.replyRow}>
-            <ToolbarButton icon={ImagePlus} label={hasImages && attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per reply` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={attachments.picking || attachments.images.length >= MaxImages || send.isPending} />
-            <TextInput
-              value={reply}
-              onChangeText={(text) => {
-                setReply(text);
-                if (text === '') {
-                  setRestored(false);
-                }
-              }}
-              onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
-              selection={selection}
-              placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.username ?? ''}`}
-              placeholderTextColor={theme.inkMuted}
-              selectionColor={theme.primary}
-              multiline
-              maxLength={MaxLength}
-              autoFocus={focusReply === '1'}
-              style={[styles.replyInput, { color: theme.ink, backgroundColor: theme.wash }]}
-            />
+            <ToolbarButton icon={ImagePlus} label={hasImages && attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per reply` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={previewing || attachments.picking || attachments.images.length >= MaxImages || send.isPending} />
+            <ToolbarButton icon={Eye} label={previewing ? 'Back to writing' : 'Preview'} onPress={() => setPreviewing((current) => !current)} active={previewing} disabled={send.isPending} />
+            {previewing ? (
+              <View style={styles.replySpacer} />
+            ) : (
+              <TextInput
+                value={reply}
+                onChangeText={(text) => {
+                  setReply(text);
+                  if (text === '') {
+                    setRestored(false);
+                  }
+                }}
+                onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+                selection={selection}
+                placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.username ?? ''}`}
+                placeholderTextColor={theme.inkMuted}
+                selectionColor={theme.primary}
+                multiline
+                maxLength={MaxLength}
+                autoFocus={focusReply === '1'}
+                style={[styles.replyInput, { color: theme.ink, backgroundColor: theme.wash }]}
+              />
+            )}
             <BodyCounter body={reply} />
             <Pressable onPress={() => send.mutate()} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend || send.isPending ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canSend, busy: send.isPending }}>
               {send.isPending ? <ActivityIndicator size="small" color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Reply</Text>}
@@ -293,6 +306,9 @@ const styles = StyleSheet.create({
   noReplies: { paddingLeft: Space.rail, paddingRight: Space.gutter, paddingVertical: 16 },
   replyBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter, paddingTop: 8, gap: 8 },
   replyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
+  replyPreview: { maxHeight: 280 },
+  replyPreviewContent: { paddingHorizontal: 4, paddingVertical: 8 },
+  replySpacer: { flex: 1 },
   replyInput: { flex: 1, fontFamily: Fonts.sans, fontSize: 15, lineHeight: 20, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, maxHeight: 120 },
   send: { height: 36, minWidth: 64, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   stash: { paddingLeft: 4 },

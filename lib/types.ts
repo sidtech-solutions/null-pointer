@@ -25,7 +25,10 @@ export type ReplyPreview = {
 
 export type CommitImage = { id?: string; url: string; width?: number; height?: number; description?: string | null };
 
-export type LinkPreview = { url: string; title?: string | null; description?: string | null; image_url?: string | null; site_name?: string | null };
+export type LinkPreview = { url: string; title?: string | null; description?: string | null; image_url?: string | null; site_name?: string | null; /** The server has not fetched the page yet; ask again for the card. */ is_pending?: boolean };
+
+/** A draft as the server would keep it, from `POST commits/preview`. */
+export type CommitPreview = { body: string; body_segments?: BodySegment[] | null; preview_segments?: BodySegment[] | null; mentions?: Mention[] };
 
 export type BodySegment = { type: 'text'; text: string } | { type: 'code'; code: string } | { type: 'block'; language?: string | null; code?: string };
 

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Camera, ChartBar, FoldVertical, ImagePlus, Plus, X } from 'lucide-react-native';
+import { Camera, ChartBar, Eye, FoldVertical, ImagePlus, Plus, X } from 'lucide-react-native';
 import { type ReactNode, useCallback, useState } from 'react';
 import { ActionSheetIOS, Alert, Linking, Platform, Pressable, StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
 
@@ -160,15 +160,16 @@ export function ToolbarButton({ icon: Icon, label, onPress, disabled = false, ac
  * The row under the text: attach from the library, take a photo, add a poll.
  * A poll can't go with images or on a quote, as on the web.
  */
-export function ComposerToolbar({ attachments, poll, onTogglePoll, withPoll = true, children }: { attachments: Attachments; poll?: NewPoll | null; onTogglePoll?: () => void; withPoll?: boolean; children?: ReactNode }) {
+export function ComposerToolbar({ attachments, poll, onTogglePoll, withPoll = true, previewing = false, onTogglePreview, children }: { attachments: Attachments; poll?: NewPoll | null; onTogglePoll?: () => void; withPoll?: boolean; previewing?: boolean; onTogglePreview?: () => void; children?: ReactNode }) {
   const full = attachments.images.length >= MaxImages;
-  const imagesOff = attachments.picking || full || Boolean(poll);
+  const imagesOff = attachments.picking || full || Boolean(poll) || previewing;
 
   return (
     <View style={styles.toolbar}>
       <ToolbarButton icon={ImagePlus} label={full ? `Up to ${MaxImages} images per commit` : 'Attach images'} onPress={() => attachments.pick('library')} disabled={imagesOff} />
       <ToolbarButton icon={Camera} label="Take a photo" onPress={() => attachments.pick('camera')} disabled={imagesOff} />
-      {withPoll && onTogglePoll && <ToolbarButton icon={ChartBar} label={poll ? 'Remove poll' : 'Add a poll'} onPress={onTogglePoll} disabled={attachments.images.length > 0} active={Boolean(poll)} />}
+      {withPoll && onTogglePoll && <ToolbarButton icon={ChartBar} label={poll ? 'Remove poll' : 'Add a poll'} onPress={onTogglePoll} disabled={attachments.images.length > 0 || previewing} active={Boolean(poll)} />}
+      {onTogglePreview && <ToolbarButton icon={Eye} label={previewing ? 'Back to writing' : 'Preview'} onPress={onTogglePreview} active={previewing} />}
       <View style={styles.spacer} />
       {children}
     </View>

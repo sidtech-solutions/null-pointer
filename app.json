@@ -2,7 +2,7 @@
   "expo": {
     "name": "null-pointer",
     "slug": "null-pointer",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "devnull",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.siddarthkay.nullpointer",
-      "versionCode": 5,
+      "versionCode": 6,
       "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#f6f7f8",

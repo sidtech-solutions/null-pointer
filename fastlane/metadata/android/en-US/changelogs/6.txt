@@ -1,0 +1,1 @@
+First F-Droid release. Native libraries no longer embed a build-machine fingerprint, so F-Droid can verify the APK against the GitHub release.

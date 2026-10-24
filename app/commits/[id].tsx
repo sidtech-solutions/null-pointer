@@ -22,6 +22,8 @@ import { findCachedCommit, patchCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
 import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
+import { isOnline } from '@/lib/network';
+import { enqueue, isOffline } from '@/lib/outbox';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { threadRows } from '@/lib/timeline';
 import { toast } from '@/lib/toast';
@@ -136,8 +138,34 @@ export default function CommitScreen() {
       setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 150);
       toast(`[reply ${created.short_hash || shortHash(created.id)}] ${created.status === 'approved' || created.status === '' ? 'posted.' : 'waiting for approval.'}`);
     },
-    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not reply.'),
+    onError: (exception) => {
+      if (isOffline(exception)) {
+        keepForLater();
+
+        return;
+      }
+
+      setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not reply.');
+    },
   });
+
+  const keepForLater = async () => {
+    await enqueue({ body: reply.trim(), parentId: id, images: attachments.images });
+    await dropStash(account.user?.id, `reply-${id}`);
+    setReply('');
+    setRestored(false);
+    setError(null);
+    attachments.clear();
+    toast('Offline. Kept in the outbox; it replies when you are back online.');
+  };
+
+  const submitReply = () => {
+    if (!isOnline()) {
+      keepForLater();
+    } else {
+      send.mutate();
+    }
+  };
 
   const commit = thread.data?.commit;
   const rows = useMemo(() => (thread.data ? threadRows([...thread.data.ancestors, thread.data.commit, ...thread.data.series]) : []), [thread.data]);
@@ -288,7 +316,7 @@ export default function CommitScreen() {
               />
             )}
             <BodyCounter body={reply} />
-            <Pressable onPress={() => send.mutate()} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend || send.isPending ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canSend, busy: send.isPending }}>
+            <Pressable onPress={submitReply} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend || send.isPending ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canSend, busy: send.isPending }}>
               {send.isPending ? <ActivityIndicator size="small" color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Reply</Text>}
             </Pressable>
           </View>

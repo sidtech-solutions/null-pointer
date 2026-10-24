@@ -233,10 +233,6 @@ jobs:
           xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath ios/build -archivePath ios/build/app.xcarchive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="match AppStore com.siddarthkay.nullpointer" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive 2>&1 | tee ios/build/xcodebuild.log | pretty
           xcodebuild -exportArchive -archivePath ios/build/app.xcarchive -exportPath ios/build/ipa \
             -exportOptionsPlist .github/ios/ExportOptions-AppStore.plist

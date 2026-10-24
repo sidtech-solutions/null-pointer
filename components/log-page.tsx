@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Feed, type FeedItem, feedItems } from '@/components/feed';
 import { FollowingEmpty } from '@/components/following-empty';
 import { NewCommitsPill } from '@/components/new-commits-pill';
+import { OutboxBanner } from '@/components/outbox-banner';
 import { RefreshFailed } from '@/components/refresh-failed';
 import { RootRow } from '@/components/root-row';
 import { SkeletonRow } from '@/components/skeleton-row';
@@ -188,7 +189,12 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
         }}
         onEndReachedThreshold={0.6}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.inkMuted} />}
-        ListHeaderComponent={refreshFailed ? <RefreshFailed onRetry={() => query.refetch()} /> : null}
+        ListHeaderComponent={
+          <View>
+            <OutboxBanner />
+            {refreshFailed ? <RefreshFailed onRetry={() => query.refetch()} /> : null}
+          </View>
+        }
         ListEmptyComponent={
           query.isPending ? (
             <View>

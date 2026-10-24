@@ -16,6 +16,10 @@
   <dict>
     <key>com.siddarthkay.nullpointer</key>
     <string>match AppStore com.siddarthkay.nullpointer</string>
+    <key>com.siddarthkay.nullpointer.share-extension</key>
+    <string>match AppStore com.siddarthkay.nullpointer.share-extension</string>
+    <key>com.siddarthkay.nullpointer.streak</key>
+    <string>match AppStore com.siddarthkay.nullpointer.streak</string>
   </dict>
 </dict>
 </plist>

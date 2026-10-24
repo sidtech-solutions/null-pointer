@@ -18,6 +18,8 @@ import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
 import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
+import { isOnline } from '@/lib/network';
+import { enqueue, isOffline } from '@/lib/outbox';
 import { sharedText, withShared } from '@/lib/share-target';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
@@ -145,8 +147,37 @@ export default function ComposeScreen() {
       router.back();
       toast(`[log ${created.short_hash || shortHash(created.id)}] ${(created.body || (created.images?.length ? `${created.images.length} ${created.images.length === 1 ? 'image' : 'images'}` : '')).split('\n')[0].slice(0, 60)}`);
     },
-    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not commit.'),
+    onError: (exception) => {
+      if (isOffline(exception)) {
+        keepForLater();
+
+        return;
+      }
+
+      setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not commit.');
+    },
   });
+
+  // No connection: the draft goes to the outbox and is pushed when one comes back.
+  const keepForLater = async () => {
+    const trimmed = body.trim();
+
+    await enqueue({ body: trimmed, quotedCommitId: quote ?? null, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null, images: attachments.images });
+    await dropStash(account.user?.id, stashName);
+    setBody('');
+    attachments.clear();
+    setPoll(null);
+    router.back();
+    toast('Offline. Kept in the outbox; it commits when you are back online.');
+  };
+
+  const submit = () => {
+    if (!isOnline()) {
+      keepForLater();
+    } else {
+      commit.mutate();
+    }
+  };
 
   const accent = account.user ? laneColor(theme, account.user.lane) : theme.primary;
   const handle = quoted.data?.commit.author?.username;
@@ -178,7 +209,7 @@ export default function ComposeScreen() {
         </Pressable>
         <Text variant="name" numberOfLines={1} style={styles.title}>{quote ? `Quote @${handle ?? ''}` : 'New commit'}</Text>
         <View style={styles.barButton}>
-          <Pressable onPress={() => commit.mutate()} disabled={!canCommit || busy} style={[styles.commit, { backgroundColor: accent, opacity: canCommit || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canCommit || busy, busy }}>
+          <Pressable onPress={submit} disabled={!canCommit || busy} style={[styles.commit, { backgroundColor: accent, opacity: canCommit || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canCommit || busy, busy }}>
             {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Commit</Text>}
           </Pressable>
         </View>

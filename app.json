@@ -9,6 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.siddarthkay.nullpointer",
+      "appleTeamId": "42R7J9G7R2",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.siddarthkay.nullpointer"]
+      },
       "buildNumber": "1",
       "supportsTablet": false,
       "icon": {
@@ -43,9 +47,16 @@
         {
           "androidIntentFilters": ["text/*", "image/*"],
           "androidMultiIntentFilters": ["image/*"],
-          "disableIOS": true
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 3
+          },
+          "iosAppGroupIdentifier": "group.com.siddarthkay.nullpointer"
         }
       ],
+      "@bacons/apple-targets",
       [
         "expo-build-properties",
         {

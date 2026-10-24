@@ -5,6 +5,7 @@ import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import 'react-native-reanimated';
 
 import { applyThemePreference, useTheme } from '@/constants/theme';
@@ -12,6 +13,8 @@ import { ReportSheet } from '@/components/report-sheet';
 import { ToastHost } from '@/components/toast-host';
 import { AccountProvider, useAccount } from '@/lib/account';
 import { reportCommit, useReporting } from '@/lib/report-store';
+import { wireNetwork } from '@/lib/network';
+import { push } from '@/lib/outbox';
 import { persister, queryClient, SevenDays, wireAppState } from '@/lib/query-client';
 
 export { ErrorBoundary } from 'expo-router';
@@ -32,6 +35,23 @@ export default function RootLayout() {
   });
 
   useEffect(() => wireAppState(), []);
+
+  // Back online, or back in the foreground: whatever waited in the outbox goes out.
+  useEffect(() => {
+    const unwire = wireNetwork(() => {
+      push(queryClient).catch(() => {});
+    });
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') {
+        push(queryClient).catch(() => {});
+      }
+    });
+
+    return () => {
+      unwire();
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (error) {
@@ -111,6 +131,7 @@ function RootLayoutNav() {
         <Stack.Screen name="starred" />
         <Stack.Screen name="search" />
         <Stack.Screen name="card/[id]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="outbox" />
         <Stack.Screen name="image" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ReportSheet commit={reporting} onClose={() => reportCommit(null)} />

@@ -13,10 +13,10 @@ export function useFollow() {
       profile ? { ...profile, is_following: isFollowing, followers_count: Math.max(0, profile.followers_count + delta) } : profile,
     );
     queryClient.setQueriesData<InfiniteData<Page<Connection>>>({ queryKey: ['connections'] }, (data) =>
-      data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((c) => (c.user.username === username ? { ...c, is_followed: isFollowing } : c)) })) } : data,
+      data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((c) => (c.user.handle === username ? { ...c, is_followed: isFollowing } : c)) })) } : data,
     );
     queryClient.setQueriesData<InfiniteData<Page<Notification>>>({ queryKey: ['notifications'] }, (data) =>
-      data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((n) => (n.actor?.username === username ? { ...n, actor: { ...n.actor, is_followed: isFollowing } } : n)) })) } : data,
+      data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((n) => (n.actor?.handle === username ? { ...n, actor: { ...n.actor, is_followed: isFollowing } } : n)) })) } : data,
     );
   };
 

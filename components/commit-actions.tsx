@@ -89,7 +89,7 @@ export function CommitActions({
   const labelStyle = compact ? styles.compactLabel : undefined;
 
   const more = () => {
-    const url = commit.html_url ?? `${baseUrl()}/@${commit.author.username}/commits/${commit.id}`;
+    const url = commit.html_url ?? `${baseUrl()}/@${commit.author.handle}/commits/${commit.id}`;
     const share = () => Share.share(Platform.OS === 'ios' ? { url } : { message: url });
     const remove = () =>
       Alert.alert('Delete this commit?', "There's no undo.", [

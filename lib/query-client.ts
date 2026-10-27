@@ -7,6 +7,10 @@ import { storage } from './storage';
 
 export const SevenDays = 7 * 24 * 60 * 60 * 1000;
 
+// Bump when the shape of what the server answers changes: a cache written by an older build is then dropped, not read.
+// 'handle': dev-null.sh renamed users' `username` to `handle` on 2026-10-26.
+export const CacheBuster = 'handle';
+
 const MaxPersistedQueries = 100;
 
 /**

@@ -5,19 +5,19 @@ export type { RemoteTarget };
 
 /** The route parameter for a conversation: `@handle` for a person, the id for an org. */
 export function targetParam(target: RemoteTarget): string {
-  return target.kind === 'direct' ? `@${target.username}` : target.id;
+  return target.kind === 'direct' ? `@${target.handle}` : target.id;
 }
 
 export function targetFromParam(param: string): RemoteTarget {
-  return param.startsWith('@') ? { kind: 'direct', username: param.slice(1) } : { kind: 'org', id: param };
+  return param.startsWith('@') ? { kind: 'direct', handle: param.slice(1) } : { kind: 'org', id: param };
 }
 
 export function targetKey(target: RemoteTarget): string {
-  return target.kind === 'direct' ? `@${target.username.toLowerCase()}` : `org:${target.id}`;
+  return target.kind === 'direct' ? `@${target.handle.toLowerCase()}` : `org:${target.id}`;
 }
 
 export function targetOf(conversation: ConversationSummary): RemoteTarget {
-  return conversation.kind === 'org' || conversation.partner === null ? { kind: 'org', id: conversation.id } : { kind: 'direct', username: conversation.partner.username };
+  return conversation.kind === 'org' || conversation.partner === null ? { kind: 'org', id: conversation.id } : { kind: 'direct', handle: conversation.partner.handle };
 }
 
 export function summaryKey(conversation: ConversationSummary): string {
@@ -41,7 +41,7 @@ export function orgTitle(name: string | null, members: { user: User }[] | null |
   }
 
   const others = (members ?? []).map((member) => member.user).filter((user) => !same(user, me));
-  const names = others.slice(0, 3).map((user) => user.name || `@${user.username}`);
+  const names = others.slice(0, 3).map((user) => user.name || `@${user.handle}`);
 
   if (others.length === 0) {
     return 'Org';
@@ -52,7 +52,7 @@ export function orgTitle(name: string | null, members: { user: User }[] | null |
 
 export function conversationTitle(conversation: ConversationSummary, me: User | null | undefined): string {
   if (conversation.kind === 'direct' && conversation.partner) {
-    return conversation.partner.name || `@${conversation.partner.username}`;
+    return conversation.partner.name || `@${conversation.partner.handle}`;
   }
 
   return orgTitle(conversation.name, conversation.members, me);
@@ -63,7 +63,7 @@ function handleOf(person: User | null | undefined, me: User | null | undefined):
     return 'someone';
   }
 
-  return same(person, me) ? 'you' : `@${person.username}`;
+  return same(person, me) ? 'you' : `@${person.handle}`;
 }
 
 /** What a logged org change says, from the reader's point of view. */
@@ -127,7 +127,7 @@ export function previewText(conversation: ConversationSummary, me: User | null |
   }
 
   if (conversation.kind === 'org' && last.user) {
-    return `@${last.user.username}: ${gist}`;
+    return `@${last.user.handle}: ${gist}`;
   }
 
   return gist;

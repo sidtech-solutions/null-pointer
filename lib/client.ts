@@ -144,10 +144,10 @@ export function nextCursor<T>(page: Page<T>): string | null {
 }
 
 /** Who a conversation is with: one person, by handle, or an org, by id. */
-export type RemoteTarget = { kind: 'direct'; username: string } | { kind: 'org'; id: string };
+export type RemoteTarget = { kind: 'direct'; handle: string } | { kind: 'org'; id: string };
 
 function remotePath(target: RemoteTarget): string {
-  return target.kind === 'direct' ? `remotes/@${encode(target.username)}` : `remotes/orgs/${encode(target.id)}`;
+  return target.kind === 'direct' ? `remotes/@${encode(target.handle)}` : `remotes/orgs/${encode(target.id)}`;
 }
 
 function currentUser(json: any): CurrentUser {
@@ -325,7 +325,7 @@ export const api = {
 
     const users = (await response.json())?.users;
 
-    return Array.isArray(users) ? users.filter((user): user is User => user && typeof user.username === 'string') : [];
+    return Array.isArray(users) ? users.filter((user): user is User => user && typeof user.handle === 'string') : [];
   },
 
   /**

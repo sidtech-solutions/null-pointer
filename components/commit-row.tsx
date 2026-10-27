@@ -68,7 +68,7 @@ export const CommitRow = memo(function CommitRow({
   const metaStyle = muted ? styles.tiny : undefined;
   const folded = !focused && !unfolded && isFolded(commit);
   const laterParts = commit.series_position && commit.series_size ? Math.max(0, commit.series_size - commit.series_position) : 0;
-  const openMention = handlers.onOpenAuthor ? (username: string) => handlers.onOpenAuthor?.({ username } as Commit['author']) : undefined;
+  const openMention = handlers.onOpenAuthor ? (username: string) => handlers.onOpenAuthor?.({ handle: username } as Commit['author']) : undefined;
   const isOwn = viewerId !== undefined && String(commit.author?.id) === String(viewerId);
   const canVote = viewerId !== undefined && !isOwn && (commit.status === 'approved' || commit.status === '');
 
@@ -79,9 +79,9 @@ export const CommitRow = memo(function CommitRow({
         <Pressable onPress={open} disabled={!open} style={({ pressed }) => [styles.press, pressed && open !== undefined && styles.pressed]} accessibilityRole={open ? 'button' : undefined} accessibilityHint={open ? 'Opens the commit' : undefined}>
           <View style={styles.header}>
             <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, focused && styles.focusedName, muted && styles.mutedName]}>
-              {commit.author.name || commit.author.username}
+              {commit.author.name || commit.author.handle}
             </Text>
-            <Text variant="mono" muted numberOfLines={1} style={[styles.shrink, metaStyle]}>@{commit.author.username}</Text>
+            <Text variant="mono" muted numberOfLines={1} style={[styles.shrink, metaStyle]}>@{commit.author.handle}</Text>
             <Text variant="mono" muted style={metaStyle}>·</Text>
             <RelativeTime iso={commit.created_at} style={metaStyle} />
             {commit.series_position && commit.series_size ? (
@@ -106,7 +106,7 @@ export const CommitRow = memo(function CommitRow({
             <Pressable onPress={() => handlers.onOpen?.(commit.parent!)} style={styles.replyingTo} hitSlop={8}>
               <CornerDownRight size={12} color={theme.inkMuted} strokeWidth={2} />
               <Text variant="mono" muted style={styles.tiny}>
-                replying to {typeof commit.parent.deleted_at === 'string' ? '[deleted]' : `@${commit.parent.author?.username}`}
+                replying to {typeof commit.parent.deleted_at === 'string' ? '[deleted]' : `@${commit.parent.author?.handle}`}
               </Text>
             </Pressable>
           )}
@@ -129,8 +129,8 @@ export const CommitRow = memo(function CommitRow({
           {commit.quoted_commit && (
             <Pressable onPress={() => handlers.onOpen?.(commit.quoted_commit!)} style={({ pressed }) => [styles.quoted, { borderColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]}>
               <View style={styles.header}>
-                <Text variant="name" numberOfLines={1} style={[styles.name, styles.mutedName]}>{commit.quoted_commit.author?.name || commit.quoted_commit.author?.username}</Text>
-                <Text variant="mono" muted style={styles.tiny}>@{commit.quoted_commit.author?.username} · {relativeTime(commit.quoted_commit.created_at)}</Text>
+                <Text variant="name" numberOfLines={1} style={[styles.name, styles.mutedName]}>{commit.quoted_commit.author?.name || commit.quoted_commit.author?.handle}</Text>
+                <Text variant="mono" muted style={styles.tiny}>@{commit.quoted_commit.author?.handle} · {relativeTime(commit.quoted_commit.created_at)}</Text>
               </View>
               <CommitBody body={commit.quoted_commit.body} segments={commit.quoted_commit.body_segments} size={14} numberOfLines={6} />
             </Pressable>

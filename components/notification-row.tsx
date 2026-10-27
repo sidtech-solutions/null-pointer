@@ -122,7 +122,7 @@ export const NotificationRow = memo(function NotificationRow({
           ) : (
             <View style={styles.avatars}>
               {actors.slice(0, 3).map((actor, index) => (
-                <Pressable key={`${actor.id}-${index}`} onPress={onOpenActor ? () => onOpenActor(actor) : undefined} hitSlop={4} style={[styles.stacked, index > 0 && styles.overlap, { borderColor: theme.surface }]} accessibilityRole="button" accessibilityLabel={`@${actor.username}`}>
+                <Pressable key={`${actor.id}-${index}`} onPress={onOpenActor ? () => onOpenActor(actor) : undefined} hitSlop={4} style={[styles.stacked, index > 0 && styles.overlap, { borderColor: theme.surface }]} accessibilityRole="button" accessibilityLabel={`@${actor.handle}`}>
                   <Avatar user={actor} size={32} />
                 </Pressable>
               ))}
@@ -135,17 +135,17 @@ export const NotificationRow = memo(function NotificationRow({
           )}
           <View style={styles.spacer} />
           <RelativeTime iso={notification.created_at} />
-          {isFollow(notification) && typeof notification.actor?.is_followed === 'boolean' && <FollowButton username={notification.actor.username} isFollowing={notification.actor.is_followed} />}
+          {isFollow(notification) && typeof notification.actor?.is_followed === 'boolean' && <FollowButton username={notification.actor.handle} isFollowing={notification.actor.is_followed} />}
         </View>
 
         {moderation ? (
           <Text>{sentence(notification)}.</Text>
         ) : (
           <Text>
-            <Text variant="name" onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>{notification.actor?.name || notification.actor?.username}</Text>{' '}
+            <Text variant="name" onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>{notification.actor?.name || notification.actor?.handle}</Text>{' '}
             {rest === '' ? (
               <>
-                <Text variant="mono" muted onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>@{notification.actor?.username}</Text> {sentence(notification)}
+                <Text variant="mono" muted onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>@{notification.actor?.handle}</Text> {sentence(notification)}
               </>
             ) : (
               `${rest} ${sentence(notification)}`
@@ -186,16 +186,16 @@ export const NotificationRow = memo(function NotificationRow({
           <View style={styles.group}>
             {(group?.items ?? []).map((item) => (
               <Pressable key={item.id} onPress={() => onOpenItem(item)} style={styles.item}>
-                <Pressable onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} hitSlop={4} accessibilityRole="button" accessibilityLabel={`@${item.actor?.username ?? ''}`}>
+                <Pressable onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} hitSlop={4} accessibilityRole="button" accessibilityLabel={`@${item.actor?.handle ?? ''}`}>
                   <Avatar user={item.actor} size={28} />
                 </Pressable>
                 <View style={styles.itemColumn}>
                   <View style={styles.itemHead}>
-                    <Text variant="name" numberOfLines={1} style={styles.shrink} onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} suppressHighlighting>{item.actor?.name || item.actor?.username}</Text>
+                    <Text variant="name" numberOfLines={1} style={styles.shrink} onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} suppressHighlighting>{item.actor?.name || item.actor?.handle}</Text>
                     <View style={styles.spacer} />
                     <Icon type={item.type} color={isModeration(item) ? theme.inkMuted : laneColor(theme, item.actor?.lane)} filled={item.type === 'starred'} />
                     <RelativeTime iso={item.created_at} />
-                    {isFollow(item) && typeof item.actor?.is_followed === 'boolean' && <FollowButton username={item.actor.username} isFollowing={item.actor.is_followed} />}
+                    {isFollow(item) && typeof item.actor?.is_followed === 'boolean' && <FollowButton username={item.actor.handle} isFollowing={item.actor.is_followed} />}
                   </View>
                   {item.commit?.body && item.type !== 'starred' && !isFollow(item) ? <Text numberOfLines={6}>{item.commit.body}</Text> : null}
                 </View>

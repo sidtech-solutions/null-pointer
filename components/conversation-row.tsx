@@ -74,7 +74,7 @@ export const ConversationRow = memo(function ConversationRow({
         <View style={styles.head}>
           <Text variant="name" numberOfLines={1} style={styles.title}>{title}</Text>
           {conversation.partner && (
-            <Text variant="mono" muted numberOfLines={1} style={[styles.handle, styles.tiny]}>@{conversation.partner.username}</Text>
+            <Text variant="mono" muted numberOfLines={1} style={[styles.handle, styles.tiny]}>@{conversation.partner.handle}</Text>
           )}
           <RelativeTime iso={conversation.last_message_at} style={styles.tiny} />
         </View>

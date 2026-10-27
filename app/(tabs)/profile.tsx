@@ -11,7 +11,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const account = useAccount();
-  const username = account.user?.username;
+  const username = account.user?.handle;
 
   if (!username) {
     return <View style={[styles.screen, { backgroundColor: theme.surface }]} />;

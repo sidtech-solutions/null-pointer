@@ -70,7 +70,7 @@ export default function SearchScreen() {
 
     if (people.data && people.data.length > 0) {
       out.push({ type: 'heading', key: 'h-people', label: 'Developers' });
-      people.data.forEach((user) => out.push({ type: 'user', key: `u-${user.id ?? user.username}`, user }));
+      people.data.forEach((user) => out.push({ type: 'user', key: `u-${user.id ?? user.handle}`, user }));
     }
 
     if (longEnough) {
@@ -91,7 +91,7 @@ export default function SearchScreen() {
     return out;
   }, [people.data, commits.data, commits.isError, commits.error, longEnough, term, all]);
 
-  const openUser = (user: Pick<User, 'username'>) => router.push({ pathname: '/users/[username]', params: { username: user.username } });
+  const openUser = (user: Pick<User, 'handle'>) => router.push({ pathname: '/users/[username]', params: { username: user.handle } });
   const openCommit = (commit: CommitHit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } });
   const searching = term !== '' && (people.isPending || (longEnough && commits.isPending));
   const nothing = term !== '' && !searching && rows.length === 0;
@@ -146,11 +146,11 @@ export default function SearchScreen() {
               );
             case 'user':
               return (
-                <Pressable onPress={() => openUser(item.user)} style={[styles.row, { borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`@${item.user.username}`}>
+                <Pressable onPress={() => openUser(item.user)} style={[styles.row, { borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`@${item.user.handle}`}>
                   <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
                   <View style={styles.column}>
-                    <Text variant="name" numberOfLines={1}>{item.user.name || item.user.username}</Text>
-                    <Text variant="mono" muted numberOfLines={1}>@{item.user.username}</Text>
+                    <Text variant="name" numberOfLines={1}>{item.user.name || item.user.handle}</Text>
+                    <Text variant="mono" muted numberOfLines={1}>@{item.user.handle}</Text>
                     {item.user.bio ? <Text variant="small" numberOfLines={2}>{item.user.bio}</Text> : null}
                   </View>
                 </Pressable>
@@ -163,7 +163,7 @@ export default function SearchScreen() {
                     <View style={styles.meta}>
                       {item.commit.user && (
                         <Pressable onPress={() => openUser(item.commit.user!)} hitSlop={6}>
-                          <Text variant="mono" muted numberOfLines={1}>@{item.commit.user.username}</Text>
+                          <Text variant="mono" muted numberOfLines={1}>@{item.commit.user.handle}</Text>
                         </Pressable>
                       )}
                       <Text variant="mono" muted>· {relativeTime(item.commit.created_at, now)}</Text>

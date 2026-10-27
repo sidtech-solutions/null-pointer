@@ -87,7 +87,7 @@ export async function loadWidgetData(): Promise<WidgetData | null> {
   }
 
   const account = JSON.parse(raw) as User;
-  const [me, profile, log] = await Promise.all([api.me(), api.profile(account.username), api.log('following').catch(() => null)]);
+  const [me, profile, log] = await Promise.all([api.me(), api.profile(account.handle), api.log('following').catch(() => null)]);
   const buckets = profile.activity?.buckets.slice(-7) ?? [];
   const days = levelsOf(buckets);
   const achievements = profile.achievements;
@@ -95,7 +95,7 @@ export async function loadWidgetData(): Promise<WidgetData | null> {
   const progress = achievements?.next_level_xp == null ? null : typeof achievements.level_progress === 'number' ? Math.min(1, Math.max(0, achievements.level_progress / 100)) : Math.min(1, Math.max(0, (achievements.xp ?? 0) / achievements.next_level_xp));
   const now = Date.now();
   const data: WidgetData = {
-    username: profile.user.username,
+    username: profile.user.handle,
     lane: profile.user.lane ?? me.user.lane ?? null,
     current: profile.streaks.current,
     longest: profile.streaks.longest,
@@ -115,7 +115,7 @@ export async function loadWidgetData(): Promise<WidgetData | null> {
     latest: (log?.data ?? [])
       .filter((commit) => !commit.deleted_at)
       .slice(0, LatestCount)
-      .map((commit) => ({ id: commit.id, username: commit.author.username, line: firstLine(commit.body) || (commit.images?.length ? 'an image' : commit.poll ? 'a poll' : ''), ago: relativeTime(commit.created_at, now) })),
+      .map((commit) => ({ id: commit.id, username: commit.author.handle, line: firstLine(commit.body) || (commit.images?.length ? 'an image' : commit.poll ? 'a poll' : ''), ago: relativeTime(commit.created_at, now) })),
     fetchedAt: new Date().toISOString(),
   };
 

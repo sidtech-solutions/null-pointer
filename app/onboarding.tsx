@@ -41,7 +41,7 @@ export default function Onboarding() {
           try {
             const me = await api.me();
 
-            if (!cancelled && me.user?.username) {
+            if (!cancelled && me.user?.handle) {
               await account.signIn(me.user);
               router.replace('/(tabs)');
             }

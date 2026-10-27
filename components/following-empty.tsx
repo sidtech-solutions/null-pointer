@@ -23,17 +23,17 @@ export function FollowingEmpty({ suggestions, onTrending, onOpenAuthor }: { sugg
           <View style={[styles.list, { borderColor: theme.hairline }]}>
             {suggestions.map((commit, index) => (
               <View key={commit.id} style={[styles.row, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.hairline }]}>
-                <Pressable onPress={() => onOpenAuthor(commit.author.username)} accessibilityLabel={`${commit.author.name || commit.author.username}'s profile`}>
+                <Pressable onPress={() => onOpenAuthor(commit.author.handle)} accessibilityLabel={`${commit.author.name || commit.author.handle}'s profile`}>
                   <Avatar user={commit.author} size={36} />
                 </Pressable>
                 <View style={styles.column}>
                   <View style={styles.names}>
-                    <Text variant="name" numberOfLines={1} style={[styles.shrink, styles.small]}>{commit.author.name || commit.author.username}</Text>
-                    <Text variant="mono" muted numberOfLines={1} style={styles.shrink}>@{commit.author.username}</Text>
+                    <Text variant="name" numberOfLines={1} style={[styles.shrink, styles.small]}>{commit.author.name || commit.author.handle}</Text>
+                    <Text variant="mono" muted numberOfLines={1} style={styles.shrink}>@{commit.author.handle}</Text>
                   </View>
                   <Text variant="small" muted numberOfLines={1}>{commit.body}</Text>
                 </View>
-                <FollowButton username={commit.author.username} isFollowing={false} />
+                <FollowButton username={commit.author.handle} isFollowing={false} />
               </View>
             ))}
           </View>

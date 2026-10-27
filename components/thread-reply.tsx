@@ -64,7 +64,7 @@ export const ThreadReply = memo(function ThreadReply({
           {deleted ? (
             <View style={[styles.avatar, { borderColor: theme.rail }]} />
           ) : (
-            <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(reply.author) : undefined} hitSlop={10} accessibilityLabel={`${reply.author.name || reply.author.username}'s profile`}>
+            <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(reply.author) : undefined} hitSlop={10} accessibilityLabel={`${reply.author.name || reply.author.handle}'s profile`}>
               <Avatar user={reply.author} size={24} />
             </Pressable>
           )}
@@ -88,11 +88,11 @@ export const ThreadReply = memo(function ThreadReply({
                 {/* The text opens the reply; the actions under it are siblings, never nested in the press area. */}
                 <Pressable onPress={() => handlers.onOpen?.(reply)} style={({ pressed }) => [styles.press, pressed && styles.pressed]} accessibilityRole="button" accessibilityHint="Opens the reply">
                   <View style={styles.header}>
-                    <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, muted && styles.mutedName]}>{reply.author.name || reply.author.username}</Text>
+                    <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, muted && styles.mutedName]}>{reply.author.name || reply.author.handle}</Text>
                     <Text variant="mono" muted style={styles.tiny}>·</Text>
                     <RelativeTime iso={reply.created_at} style={styles.tiny} />
                   </View>
-                  <CommitBody body={reply.body} segments={reply.body_segments} size={muted ? 14 : 15} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ username } as Commit['author']) : undefined} />
+                  <CommitBody body={reply.body} segments={reply.body_segments} size={muted ? 14 : 15} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ handle: username } as Commit['author']) : undefined} />
                   <CommitMedia images={reply.images} preview={reply.link_preview} compact />
                 </Pressable>
                 <CommitActions commit={reply} viewerId={viewerId} compact={muted} withQuote={false} expandable={false} handlers={handlers} />

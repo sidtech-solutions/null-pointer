@@ -38,7 +38,7 @@ export function ReplyGhost({ reply, authors, onPress, tint, compact = false }: {
 
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={[styles.ghost, { borderLeftColor: tint }, compact && styles.ghostCompact]}>
-      <Text variant="mono" numberOfLines={1} style={[styles.ghostName, { color: tint }]}>{author ? `@${author.username}` : 'message'}</Text>
+      <Text variant="mono" numberOfLines={1} style={[styles.ghostName, { color: tint }]}>{author ? `@${author.handle}` : 'message'}</Text>
       <Text variant="small" numberOfLines={compact ? 1 : 2} color={theme.inkMuted} style={styles.ghostBody}>{gist}</Text>
     </Pressable>
   );
@@ -200,7 +200,7 @@ export const MessageBubble = memo(function MessageBubble({
       {showsAuthor && !mine && author && (
         <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(author) : undefined} style={styles.author} hitSlop={6}>
           <Avatar user={author} size={20} />
-          <Text variant="mono" muted style={styles.tiny}>@{author.username}</Text>
+          <Text variant="mono" muted style={styles.tiny}>@{author.handle}</Text>
         </Pressable>
       )}
 
@@ -209,7 +209,7 @@ export const MessageBubble = memo(function MessageBubble({
         onLongPress={handlers.onLongPress ? () => handlers.onLongPress?.(message) : undefined}
         delayLongPress={300}
         style={({ pressed }) => [styles.bubble, { maxWidth: bubbleWidth + 24, backgroundColor: mine ? theme.primary : theme.wash }, mine ? styles.bubbleMine : styles.bubbleTheirs, pressed && styles.pressed]}
-        accessibilityLabel={`${mine ? 'You' : author ? `@${author.username}` : 'Message'}: ${messageGist(message)}, ${timeOf(message.created_at)}`}
+        accessibilityLabel={`${mine ? 'You' : author ? `@${author.handle}` : 'Message'}: ${messageGist(message)}, ${timeOf(message.created_at)}`}
         accessibilityHint={handlers.onDoubleTap ? 'Long press for reactions and reply, double tap for a heart' : 'Long press for reactions and reply'}>
         {message.reply_to && <ReplyGhost reply={message.reply_to} authors={authors} tint={mine ? theme.primaryInk : theme.primary} onPress={handlers.onOpenReply ? () => handlers.onOpenReply?.(message.reply_to!.id) : undefined} />}
         {hasMedia && <Images images={message.images!} width={Math.min(bubbleWidth, 280)} />}
@@ -217,7 +217,7 @@ export const MessageBubble = memo(function MessageBubble({
           mine ? (
             <Text selectable color={theme.primaryInk} style={styles.bodyMine}>{message.body}</Text>
           ) : (
-            <CommitBody body={message.body} segments={message.body_segments} size={15} onOpenLink={openLink} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ username } as User) : undefined} />
+            <CommitBody body={message.body} segments={message.body_segments} size={15} onOpenLink={openLink} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ handle: username } as User) : undefined} />
           )
         ) : !hasMedia ? (
           <Text variant="small" color={inkOnBubble} style={styles.voice}>Voice note · listen on dev-null.sh</Text>

@@ -19,6 +19,11 @@ type Account = {
 
 const AccountContext = createContext<Account | null>(null);
 
+// Accounts stored before dev-null.sh renamed `username` to `handle` keep the old key until the next sign-in.
+function restore(stored: User & { username?: string }): User {
+  return typeof stored.handle === 'string' || typeof stored.username !== 'string' ? stored : { ...stored, handle: stored.username };
+}
+
 export function AccountProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<User | null>(null);
@@ -33,7 +38,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const parsed = stored ? (JSON.parse(stored) as User) : null;
+        const parsed = stored ? restore(JSON.parse(stored)) : null;
         setUser(parsed);
         setStatus(parsed ? 'signed-in' : 'signed-out');
       })

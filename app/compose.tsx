@@ -61,7 +61,7 @@ export default function ComposeScreen() {
       return;
     }
 
-    const next = insertMention(body, mention, user.username);
+    const next = insertMention(body, mention, user.handle);
     setBody(next.text);
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
@@ -180,7 +180,7 @@ export default function ComposeScreen() {
   };
 
   const accent = account.user ? laneColor(theme, account.user.lane) : theme.primary;
-  const handle = quoted.data?.commit.author?.username;
+  const handle = quoted.data?.commit.author?.handle;
   const busy = commit.isPending;
 
   const cancel = () => {

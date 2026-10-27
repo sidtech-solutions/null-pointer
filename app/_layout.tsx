@@ -15,7 +15,7 @@ import { AccountProvider, useAccount } from '@/lib/account';
 import { reportCommit, useReporting } from '@/lib/report-store';
 import { wireNetwork } from '@/lib/network';
 import { push } from '@/lib/outbox';
-import { persister, queryClient, SevenDays, wireAppState } from '@/lib/query-client';
+import { CacheBuster, persister, queryClient, SevenDays, wireAppState } from '@/lib/query-client';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -70,7 +70,7 @@ export default function RootLayout() {
   }
 
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: SevenDays }}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: SevenDays, buster: CacheBuster }}>
       <AccountProvider>
         <ShareIntentProvider>
           <ShareTarget />

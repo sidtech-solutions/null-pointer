@@ -11,17 +11,17 @@ export { insertMention, mentionBeforeCaret, type MentionToken };
 function matches(user: User, term: string): boolean {
   const needle = term.toLowerCase();
 
-  return needle === '' || user.username.toLowerCase().includes(needle) || (user.name ?? '').toLowerCase().includes(needle);
+  return needle === '' || user.handle.toLowerCase().includes(needle) || (user.name ?? '').toLowerCase().includes(needle);
 }
 
 function rank(users: User[], term: string, limit = 6): User[] {
   const needle = term.toLowerCase();
-  const tier = (user: User) => (user.username.toLowerCase() === needle ? 0 : user.username.toLowerCase().startsWith(needle) ? 1 : (user.name ?? '').toLowerCase().startsWith(needle) ? 2 : 3);
+  const tier = (user: User) => (user.handle.toLowerCase() === needle ? 0 : user.handle.toLowerCase().startsWith(needle) ? 1 : (user.name ?? '').toLowerCase().startsWith(needle) ? 2 : 3);
   const seen = new Set<string>();
 
   return users
     .filter((user) => {
-      const key = user.username.toLowerCase();
+      const key = user.handle.toLowerCase();
 
       if (seen.has(key) || !matches(user, term)) {
         return false;
@@ -31,7 +31,7 @@ function rank(users: User[], term: string, limit = 6): User[] {
 
       return true;
     })
-    .sort((left, right) => tier(left) - tier(right) || left.username.localeCompare(right.username))
+    .sort((left, right) => tier(left) - tier(right) || left.handle.localeCompare(right.handle))
     .slice(0, limit);
 }
 
@@ -67,8 +67,8 @@ export function useMentionSuggestions(token: MentionToken | null, context: Menti
   }, [token?.term, token === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const following = useQuery({
-    queryKey: ['mention-following', me?.username],
-    queryFn: async () => (await api.connections(me!.username, 'following')).data.map((connection) => connection.user),
+    queryKey: ['mention-following', me?.handle],
+    queryFn: async () => (await api.connections(me!.handle, 'following')).data.map((connection) => connection.user),
     enabled: account.status === 'signed-in' && me !== null && term !== null && !context.members,
     staleTime: 5 * 60_000,
   });

@@ -47,7 +47,7 @@ export default function CardScreen() {
 
   const commit = thread.data?.commit;
   const scale = Math.min(1, (screen - Space.gutter * 2) / CardWidth);
-  const url = commit ? (commit.html_url ?? `${baseUrl()}/@${commit.author.username}/commits/${commit.id}`) : '';
+  const url = commit ? (commit.html_url ?? `${baseUrl()}/@${commit.author.handle}/commits/${commit.id}`) : '';
 
   const share = async () => {
     if (!commit || !card.current) {

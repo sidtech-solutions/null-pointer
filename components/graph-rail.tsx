@@ -26,7 +26,7 @@ export function GraphRail({
   lane: string;
   previousLane?: string;
   node?: RailNode;
-  user?: Pick<User, 'name' | 'username' | 'avatar_url'>;
+  user?: Pick<User, 'name' | 'handle' | 'avatar_url'>;
   hasTail?: boolean;
   endsWithDot?: boolean;
   replyTail?: boolean;
@@ -61,7 +61,7 @@ export function GraphRail({
   );
 }
 
-function Node({ node, lane, user, avatarSize, onPress }: { node: RailNode; lane: string; user?: Pick<User, 'name' | 'username' | 'avatar_url'>; avatarSize: number; onPress?: () => void }) {
+function Node({ node, lane, user, avatarSize, onPress }: { node: RailNode; lane: string; user?: Pick<User, 'name' | 'handle' | 'avatar_url'>; avatarSize: number; onPress?: () => void }) {
   const theme = useTheme();
   const center = Space.railCenter;
 
@@ -70,7 +70,7 @@ function Node({ node, lane, user, avatarSize, onPress }: { node: RailNode; lane:
       const size = avatarSize;
 
       return (
-        <Pressable onPress={onPress} disabled={!onPress} accessibilityLabel={user ? `${user.name || user.username}'s profile` : undefined} style={{ position: 'absolute', top: center - size / 2, left: Space.rail / 2 - size / 2 }}>
+        <Pressable onPress={onPress} disabled={!onPress} accessibilityLabel={user ? `${user.name || user.handle}'s profile` : undefined} style={{ position: 'absolute', top: center - size / 2, left: Space.rail / 2 - size / 2 }}>
           {user ? <Avatar user={user} lane={lane} size={size - 8} /> : null}
         </Pressable>
       );

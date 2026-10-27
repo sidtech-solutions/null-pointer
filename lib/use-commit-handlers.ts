@@ -73,18 +73,18 @@ export function useCommitHandlers(): CommitHandlers {
     onSuccess: (updated, commit) => {
       const pinned = updated?.is_pinned ?? !commit.is_pinned;
 
-      queryClient.setQueriesData<Profile>({ queryKey: ['profile', account.user?.username] }, (profile) => (profile ? { ...profile, pinned_commit: pinned ? { ...commit, is_pinned: true } : profile.pinned_commit?.id === commit.id ? null : profile.pinned_commit } : profile));
+      queryClient.setQueriesData<Profile>({ queryKey: ['profile', account.user?.handle] }, (profile) => (profile ? { ...profile, pinned_commit: pinned ? { ...commit, is_pinned: true } : profile.pinned_commit?.id === commit.id ? null : profile.pinned_commit } : profile));
       patchCommit(queryClient, commit.id, (c) => ({ ...c, is_pinned: pinned }));
 
       if (pinned) {
         // Only one commit is pinned at a time, so any other copy marked pinned is stale.
-        queryClient.setQueriesData<InfiniteData<Page<Commit>>>({ queryKey: ['user-commits', account.user?.username] }, (data) =>
+        queryClient.setQueriesData<InfiniteData<Page<Commit>>>({ queryKey: ['user-commits', account.user?.handle] }, (data) =>
           data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map((c) => (c.id !== commit.id && c.is_pinned ? { ...c, is_pinned: false } : c)) })) } : data,
         );
       }
 
       toast(pinned ? `Pinned ${commit.short_hash || shortHash(commit.id)} to your profile.` : `Unpinned ${commit.short_hash || shortHash(commit.id)}.`);
-      queryClient.invalidateQueries({ queryKey: ['profile', account.user?.username] });
+      queryClient.invalidateQueries({ queryKey: ['profile', account.user?.handle] });
     },
     onError: (error) => {
       // Production answers 405 to a route it does not have yet; a 404 would mean the commit is gone.
@@ -142,7 +142,7 @@ export function useCommitHandlers(): CommitHandlers {
       onOpen: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } }),
       onReply: (commit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id, reply: '1' } }),
       onQuote: (commit) => router.push({ pathname: '/compose', params: { quote: commit.id } }),
-      onOpenAuthor: (user) => router.push({ pathname: '/users/[username]', params: { username: user.username } }),
+      onOpenAuthor: (user) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }),
       onReport: (commit) => reportCommit(commit),
       onPastel: (commit) => {
         tap();

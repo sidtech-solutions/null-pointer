@@ -163,7 +163,7 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
   });
 
   const settle = useMutation({
-    mutationFn: ({ conversation, merge }: { conversation: ConversationSummary; merge: boolean }) => (merge ? api.mergeRequest(conversation.partner?.username ?? '') : api.dropRequest(conversation.partner?.username ?? '')),
+    mutationFn: ({ conversation, merge }: { conversation: ConversationSummary; merge: boolean }) => (merge ? api.mergeRequest(conversation.partner?.handle ?? '') : api.dropRequest(conversation.partner?.handle ?? '')),
     onSuccess: (_result, { conversation, merge }) => {
       removeFromInbox(queryClient, summaryKey(conversation));
       bumpRemotesUnread(queryClient, -1);
@@ -190,7 +190,7 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
     }
 
     if (conversation.partner) {
-      const username = conversation.partner.username;
+      const username = conversation.partner.handle;
       options.push({ label: 'View profile', run: () => router.push({ pathname: '/users/[username]', params: { username } }) });
     }
 

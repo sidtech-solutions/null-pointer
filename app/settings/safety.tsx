@@ -48,7 +48,7 @@ export default function SafetyScreen() {
     mutationFn: (username: string) => (kind === 'muted' ? api.unmute(username) : api.unblock(username)),
     onSuccess: (_result, username) => {
       queryClient.setQueryData<InfiniteData<Page<User>>>(['safety', kind], (data) =>
-        data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.filter((user) => user.username !== username) })) } : data,
+        data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.filter((user) => user.handle !== username) })) } : data,
       );
       queryClient.invalidateQueries({ queryKey: ['profile', username] });
       queryClient.invalidateQueries({ queryKey: ['log'] });
@@ -78,20 +78,20 @@ export default function SafetyScreen() {
       />
       <FlashList
         data={people}
-        keyExtractor={(user: User) => String(user.id ?? user.username)}
+        keyExtractor={(user: User) => String(user.id ?? user.handle)}
         ListHeaderComponent={
           <View style={[styles.description, { borderBottomColor: theme.hairline }]}>
             <Text variant="small" muted>{Copy[kind].description}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.username } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
+          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.handle } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
             <Avatar user={item} size={40} lane={laneColor(theme, item.lane)} />
             <View style={styles.column}>
-              <Text variant="name" numberOfLines={1}>{item.name || item.username}</Text>
-              <Text variant="mono" muted numberOfLines={1}>@{item.username}</Text>
+              <Text variant="name" numberOfLines={1}>{item.name || item.handle}</Text>
+              <Text variant="mono" muted numberOfLines={1}>@{item.handle}</Text>
             </View>
-            <Button title={Copy[kind].undo} variant="outline" size="sm" busy={undo.isPending && undo.variables === item.username} onPress={() => undo.mutate(item.username)} />
+            <Button title={Copy[kind].undo} variant="outline" size="sm" busy={undo.isPending && undo.variables === item.handle} onPress={() => undo.mutate(item.handle)} />
           </Pressable>
         )}
         onEndReached={() => {

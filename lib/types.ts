@@ -2,7 +2,7 @@ export type Lane = number | string | null;
 
 export type User = {
   id: string | number;
-  username: string;
+  handle: string;
   name: string | null;
   avatar_url: string | null;
   bio?: string | null;
@@ -28,14 +28,14 @@ export type CommitImage = { id?: string; url: string; width?: number; height?: n
 export type LinkPreview = { url: string; title?: string | null; description?: string | null; image_url?: string | null; site_name?: string | null; /** The server has not fetched the page yet; ask again for the card. */ is_pending?: boolean };
 
 /** A commit as the web's public commit search answers it: the model with its author under `user`, not a CommitResource. */
-export type CommitHit = { id: string; body: string; created_at: string | null; replies_count?: number; stars_count?: number; user?: Pick<User, 'id' | 'username' | 'name' | 'avatar_url' | 'lane'> | null };
+export type CommitHit = { id: string; body: string; created_at: string | null; replies_count?: number; stars_count?: number; user?: Pick<User, 'id' | 'handle' | 'name' | 'avatar_url' | 'lane'> | null };
 
 /** A draft as the server would keep it, from `POST commits/preview`. */
 export type CommitPreview = { body: string; body_segments?: BodySegment[] | null; preview_segments?: BodySegment[] | null; mentions?: Mention[] };
 
 export type BodySegment = { type: 'text'; text: string } | { type: 'code'; code: string } | { type: 'block'; language?: string | null; /** The code highlighted by the server, as tempest/highlight HTML. */ html?: string; code?: string };
 
-export type Mention = { username: string; offset?: number; length?: number };
+export type Mention = { handle: string; offset?: number; length?: number };
 
 export type PollOption = { id: string; label: string; votes_count?: number | null; voted?: boolean; percentage?: number | null };
 

@@ -176,8 +176,8 @@ export default function SettingsScreen() {
             <View style={styles.identity}>
               <Avatar user={user} size={48} lane={previewColor} />
               <View style={styles.shrink}>
-                <Text variant="name">{user.name || user.username}</Text>
-                <Text variant="mono" muted>@{user.username}</Text>
+                <Text variant="name">{user.name || user.handle}</Text>
+                <Text variant="mono" muted>@{user.handle}</Text>
               </View>
             </View>
           )}
@@ -197,7 +197,7 @@ export default function SettingsScreen() {
             {user && <Avatar user={user} size={40} lane={previewColor} />}
             <View style={styles.handle}>
               <View style={[styles.dot, { backgroundColor: previewColor }]} />
-              <Text variant="mono" muted>@{user?.username}</Text>
+              <Text variant="mono" muted>@{user?.handle}</Text>
             </View>
           </View>
           <View style={styles.swatches}>

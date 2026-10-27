@@ -48,8 +48,8 @@ export function DraftPreview({ body, author, images = [], poll = null, quoted = 
         <View style={styles.header}>
           <Avatar user={author} size={32} lane={lane} />
           <View style={styles.identity}>
-            <Text variant="name" numberOfLines={1} style={styles.name}>{author.name || author.username}</Text>
-            <Text variant="mono" muted numberOfLines={1} style={styles.tiny}>@{author.username} · now</Text>
+            <Text variant="name" numberOfLines={1} style={styles.name}>{author.name || author.handle}</Text>
+            <Text variant="mono" muted numberOfLines={1} style={styles.tiny}>@{author.handle} · now</Text>
           </View>
         </View>
       )}
@@ -85,8 +85,8 @@ export function DraftPreview({ body, author, images = [], poll = null, quoted = 
       {quoted && (
         <View style={[styles.quoted, { borderColor: theme.hairline }]}>
           <View style={styles.quotedHeader}>
-            <Text variant="name" numberOfLines={1} style={styles.quotedName}>{quoted.author?.name || quoted.author?.username}</Text>
-            <Text variant="mono" muted style={styles.tiny}>@{quoted.author?.username}</Text>
+            <Text variant="name" numberOfLines={1} style={styles.quotedName}>{quoted.author?.name || quoted.author?.handle}</Text>
+            <Text variant="mono" muted style={styles.tiny}>@{quoted.author?.handle}</Text>
           </View>
           <CommitBody body={quoted.body} segments={quoted.body_segments} size={14} numberOfLines={6} />
         </View>

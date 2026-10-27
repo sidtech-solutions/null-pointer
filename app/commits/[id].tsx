@@ -64,7 +64,7 @@ export default function CommitScreen() {
       return;
     }
 
-    const next = insertMention(reply, mention, user.username);
+    const next = insertMention(reply, mention, user.handle);
     setReply(next.text);
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
@@ -306,7 +306,7 @@ export default function CommitScreen() {
                 }}
                 onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
                 selection={selection}
-                placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.username ?? ''}`}
+                placeholder={hasImages ? 'Add a caption (optional)' : `Reply to @${commit.author?.handle ?? ''}`}
                 placeholderTextColor={theme.inkMuted}
                 selectionColor={theme.primary}
                 multiline

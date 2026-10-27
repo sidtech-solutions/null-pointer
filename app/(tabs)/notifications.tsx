@@ -214,8 +214,8 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
 
       if (commit) {
         router.push({ pathname: '/commits/[id]', params: { id: commit } });
-      } else if (notification.actor?.username) {
-        router.push({ pathname: '/users/[username]', params: { username: notification.actor.username } });
+      } else if (notification.actor?.handle) {
+        router.push({ pathname: '/users/[username]', params: { username: notification.actor.handle } });
       }
     },
     [router],
@@ -251,7 +251,7 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
             onToggleGroup={toggleGroup}
             onOpenItem={openNotification}
             onLoadOlder={(notification) => loadGroup(notification, true)}
-            onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.username } })}
+            onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.handle } })}
           />
         )
       }

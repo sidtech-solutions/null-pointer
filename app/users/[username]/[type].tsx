@@ -46,23 +46,23 @@ export default function ConnectionsScreen() {
       />
       <FlashList
         data={people}
-        keyExtractor={(item: Connection) => String(item.user.id ?? item.user.username)}
+        keyExtractor={(item: Connection) => String(item.user.id ?? item.user.handle)}
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.user.username } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
+          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.user.handle } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
             <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
             <View style={styles.column}>
               <View style={styles.names}>
-                <Text variant="name" numberOfLines={1} style={styles.shrink}>{item.user.name || item.user.username}</Text>
+                <Text variant="name" numberOfLines={1} style={styles.shrink}>{item.user.name || item.user.handle}</Text>
                 {item.follows_you && (
                   <View style={[styles.chip, { backgroundColor: theme.wash }]}>
                     <Text variant="small" muted style={styles.chipText}>Follows you</Text>
                   </View>
                 )}
               </View>
-              <Text variant="mono" muted numberOfLines={1}>@{item.user.username}</Text>
+              <Text variant="mono" muted numberOfLines={1}>@{item.user.handle}</Text>
               {item.user.bio ? <Text variant="small" numberOfLines={2}>{item.user.bio}</Text> : null}
             </View>
-            {account.user?.username !== item.user.username && <FollowButton username={item.user.username} isFollowing={item.is_followed} />}
+            {account.user?.handle !== item.user.handle && <FollowButton username={item.user.handle} isFollowing={item.is_followed} />}
           </Pressable>
         )}
         onEndReached={() => {

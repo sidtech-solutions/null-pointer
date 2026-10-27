@@ -50,7 +50,7 @@ export default function NewRemoteScreen() {
   });
 
   const create = useMutation({
-    mutationFn: () => api.createOrg(name, picked.map((user) => user.username)),
+    mutationFn: () => api.createOrg(name, picked.map((user) => user.handle)),
     onSuccess: (id) => {
       if (id === '') {
         router.back();
@@ -71,7 +71,7 @@ export default function NewRemoteScreen() {
     }
 
     if (mode === 'remote') {
-      router.replace({ pathname: '/remotes/[target]', params: { target: targetParam({ kind: 'direct', username: candidate.user.username }) } });
+      router.replace({ pathname: '/remotes/[target]', params: { target: targetParam({ kind: 'direct', handle: candidate.user.handle }) } });
 
       return;
     }
@@ -111,8 +111,8 @@ export default function NewRemoteScreen() {
         {mode === 'org' && picked.length > 0 && (
           <View style={styles.picked}>
             {picked.map((user) => (
-              <Pressable key={String(user.id)} onPress={() => setPicked((current) => current.filter((candidate) => String(candidate.id) !== String(user.id)))} style={[styles.chip, { backgroundColor: theme.primarySoft }]} accessibilityRole="button" accessibilityLabel={`Remove @${user.username}`}>
-                <Text variant="mono" color={theme.primary} style={styles.chipText}>@{user.username}</Text>
+              <Pressable key={String(user.id)} onPress={() => setPicked((current) => current.filter((candidate) => String(candidate.id) !== String(user.id)))} style={[styles.chip, { backgroundColor: theme.primarySoft }]} accessibilityRole="button" accessibilityLabel={`Remove @${user.handle}`}>
+                <Text variant="mono" color={theme.primary} style={styles.chipText}>@{user.handle}</Text>
                 <X size={12} color={theme.primary} strokeWidth={2} />
               </Pressable>
             ))}
@@ -136,11 +136,11 @@ export default function NewRemoteScreen() {
               style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.wash : theme.surface, borderBottomColor: theme.hairline, opacity: disabled ? 0.55 : 1 }]}
               accessibilityRole="button"
               accessibilityState={{ disabled, selected }}
-              accessibilityLabel={`${item.user.name || item.user.username}, @${item.user.username}${item.reason ? `, ${item.reason}` : ''}`}>
+              accessibilityLabel={`${item.user.name || item.user.handle}, @${item.user.handle}${item.reason ? `, ${item.reason}` : ''}`}>
               <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
               <View style={styles.names}>
-                <Text variant="name" numberOfLines={1}>{item.user.name || item.user.username}</Text>
-                <Text variant="mono" muted numberOfLines={1} style={styles.small}>@{item.user.username}{item.reason ? ` · ${item.reason}` : ''}</Text>
+                <Text variant="name" numberOfLines={1}>{item.user.name || item.user.handle}</Text>
+                <Text variant="mono" muted numberOfLines={1} style={styles.small}>@{item.user.handle}{item.reason ? ` · ${item.reason}` : ''}</Text>
               </View>
               {mode === 'org' && !disabled && (
                 <View style={[styles.check, { borderColor: selected ? theme.primary : theme.rail, backgroundColor: selected ? theme.primary : 'transparent' }]}>

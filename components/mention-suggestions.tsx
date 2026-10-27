@@ -22,10 +22,10 @@ export function MentionSuggestions({ users, onPick }: { users: User[]; onPick: (
           android_ripple={{ color: theme.wash }}
           style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.wash }]}
           accessibilityRole="menuitem"
-          accessibilityLabel={`Mention @${user.username}`}>
+          accessibilityLabel={`Mention @${user.handle}`}>
           <Avatar user={user} size={28} />
-          <Text variant="small" numberOfLines={1} style={styles.name}>{user.name || user.username}</Text>
-          <Text variant="mono" muted numberOfLines={1} style={styles.handle}>@{user.username}</Text>
+          <Text variant="small" numberOfLines={1} style={styles.name}>{user.name || user.handle}</Text>
+          <Text variant="mono" muted numberOfLines={1} style={styles.handle}>@{user.handle}</Text>
         </Pressable>
       ))}
     </View>

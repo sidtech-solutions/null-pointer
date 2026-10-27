@@ -103,9 +103,9 @@ export default function ThreadScreen() {
   const access = data?.access ?? 'open';
   const open = access === 'open';
   const archived = data?.is_archived ?? false;
-  const title = data ? (data.kind === 'direct' ? data.partner.name || `@${data.partner.username}` : orgTitle(data.org.name, data.members, me)) : target.kind === 'direct' ? `@${target.username}` : 'Org';
-  const subtitle = data?.kind === 'direct' ? `@${data.partner.username}` : data?.kind === 'org' ? `${data.members.length} ${data.members.length === 1 ? 'member' : 'members'}` : '';
-  const typing = data ? (data.kind === 'org' ? typingText(data.typing) : data.partner_typing ? `@${data.partner.username} is typing…` : null) : null;
+  const title = data ? (data.kind === 'direct' ? data.partner.name || `@${data.partner.handle}` : orgTitle(data.org.name, data.members, me)) : target.kind === 'direct' ? `@${target.handle}` : 'Org';
+  const subtitle = data?.kind === 'direct' ? `@${data.partner.handle}` : data?.kind === 'org' ? `${data.members.length} ${data.members.length === 1 ? 'member' : 'members'}` : '';
+  const typing = data ? (data.kind === 'org' ? typingText(data.typing) : data.partner_typing ? `@${data.partner.handle} is typing…` : null) : null;
 
   // An org suggests its members; a direct thread only the partner.
   const mentionable = useMemo(() => (data?.kind === 'org' ? data.members.map((member) => member.user) : partner ? [partner] : []), [data, partner]);
@@ -117,7 +117,7 @@ export default function ThreadScreen() {
       return;
     }
 
-    const next = insertMention(body, mention, user.username);
+    const next = insertMention(body, mention, user.handle);
     setBody(next.text);
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
@@ -219,19 +219,19 @@ export default function ThreadScreen() {
   });
 
   const merge = useMutation({
-    mutationFn: () => api.mergeRequest(target.kind === 'direct' ? target.username : ''),
+    mutationFn: () => api.mergeRequest(target.kind === 'direct' ? target.handle : ''),
     onSuccess: () => {
       thread.patch((current) => ({ ...current, access: 'open' }));
       removeFromInbox(queryClient, key);
       bumpRemotesUnread(queryClient, -1);
       queryClient.invalidateQueries({ queryKey: ['remotes'] });
-      toast(`Merged. You can push to @${partner?.username ?? ''} now.`);
+      toast(`Merged. You can push to @${partner?.handle ?? ''} now.`);
     },
     onError: (error) => failed(error, 'fatal: could not merge the request.'),
   });
 
   const drop = useMutation({
-    mutationFn: () => api.dropRequest(target.kind === 'direct' ? target.username : ''),
+    mutationFn: () => api.dropRequest(target.kind === 'direct' ? target.handle : ''),
     onSuccess: () => {
       removeFromInbox(queryClient, key);
       bumpRemotesUnread(queryClient, -1);
@@ -242,7 +242,7 @@ export default function ThreadScreen() {
   });
 
   const block = useMutation({
-    mutationFn: () => api.block(target.kind === 'direct' ? target.username : ''),
+    mutationFn: () => api.block(target.kind === 'direct' ? target.handle : ''),
     onSuccess: () => {
       removeFromInbox(queryClient, key);
       queryClient.invalidateQueries({ queryKey: ['remotes'] });
@@ -256,7 +256,7 @@ export default function ThreadScreen() {
     const options: { label: string; destructive?: boolean; run: () => void }[] = [];
 
     if (partner) {
-      options.push({ label: 'View profile', run: () => router.push({ pathname: '/users/[username]', params: { username: partner.username } }) });
+      options.push({ label: 'View profile', run: () => router.push({ pathname: '/users/[username]', params: { username: partner.handle } }) });
     } else if (data?.kind === 'org') {
       options.push({ label: 'Members', run: () => setMembersOpen(true) });
     }
@@ -270,7 +270,7 @@ export default function ThreadScreen() {
         label: 'Block',
         destructive: true,
         run: () =>
-          Alert.alert(`Block @${partner.username}?`, "You'll stop following each other and this conversation goes away for you. Unblocking doesn't bring back follows.", [
+          Alert.alert(`Block @${partner.handle}?`, "You'll stop following each other and this conversation goes away for you. Unblocking doesn't bring back follows.", [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Block', style: 'destructive', onPress: () => block.mutate() },
           ]),
@@ -316,7 +316,7 @@ export default function ThreadScreen() {
     }
   };
 
-  const openAuthor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.username } }), [router]);
+  const openAuthor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }), [router]);
 
   const scrollToMessage = useCallback(
     (id: number) => {
@@ -377,7 +377,7 @@ export default function ThreadScreen() {
     [me, authors, handlers, thread.retry, thread.discard],
   );
 
-  const notice = partner ? accessNotice(access, partner.username) : null;
+  const notice = partner ? accessNotice(access, partner.handle) : null;
   const empty = !thread.isPending && rows.length === 0;
   const accent = me ? laneColor(theme, me.lane) : theme.primary;
 
@@ -432,7 +432,7 @@ export default function ThreadScreen() {
           ) : thread.error ? (
             <EmptyState fatal={thread.error.message} action="Try again" onAction={() => thread.refetch()} />
           ) : empty ? (
-            <EmptyState fatal={partner ? `$ git remote add ${partner.username}` : '$ git remote add org'}>{open ? (partner ? `Nothing pushed yet. Say something to @${partner.username}.` : 'Nothing pushed yet.') : ''}</EmptyState>
+            <EmptyState fatal={partner ? `$ git remote add ${partner.handle}` : '$ git remote add org'}>{open ? (partner ? `Nothing pushed yet. Say something to @${partner.handle}.` : 'Nothing pushed yet.') : ''}</EmptyState>
           ) : null
         }
       />
@@ -471,7 +471,7 @@ export default function ThreadScreen() {
                 onChangeText={change}
                 onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
                 selection={selection}
-                placeholder={partner ? `Push to @${partner.username}` : 'Push to the org'}
+                placeholder={partner ? `Push to @${partner.handle}` : 'Push to the org'}
                 placeholderTextColor={theme.inkMuted}
                 multiline
                 maxLength={MessageMaxLength}
@@ -514,8 +514,8 @@ export default function ThreadScreen() {
                   accessibilityRole="button">
                   <Avatar user={member.user} size={36} />
                   <View style={styles.memberNames}>
-                    <Text variant="name" numberOfLines={1}>{member.user.name || member.user.username}</Text>
-                    <Text variant="mono" muted numberOfLines={1} style={styles.subtitle}>@{member.user.username}</Text>
+                    <Text variant="name" numberOfLines={1}>{member.user.name || member.user.handle}</Text>
+                    <Text variant="mono" muted numberOfLines={1} style={styles.subtitle}>@{member.user.handle}</Text>
                   </View>
                   {member.role === 'maintainer' && (
                     <View style={[styles.role, { backgroundColor: theme.wash }]}>

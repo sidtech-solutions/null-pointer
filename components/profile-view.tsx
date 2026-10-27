@@ -102,7 +102,7 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
   });
 
   const user = profile.data?.user;
-  const isMe = account.user?.username === username;
+  const isMe = account.user?.handle === username;
   const lane = laneColor(theme, user?.lane);
   const list = useMemo(() => commits.data?.pages.flatMap((page) => page.data) ?? [], [commits.data]);
   const items = useMemo<FeedItem[]>(() => feedItems(feedRows(list, now)), [list, now]);
@@ -154,10 +154,10 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
           </View>
 
           <View style={styles.names}>
-            <Text variant="title">{user.name || user.username}</Text>
+            <Text variant="title">{user.name || user.handle}</Text>
             <View style={styles.handle}>
               <View style={[styles.dot, { backgroundColor: lane }]} />
-              <Text variant="mono" muted numberOfLines={1} style={styles.shrink}>@{user.username}</Text>
+              <Text variant="mono" muted numberOfLines={1} style={styles.shrink}>@{user.handle}</Text>
               {profile.data?.follows_you && (
                 <View style={[styles.chip, { backgroundColor: theme.wash }]}>
                   <Text variant="small" muted style={styles.chipText}>Follows you</Text>
@@ -184,7 +184,7 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
             {user.company ? <Fact icon={<Building2 size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.company} /> : null}
             {user.location ? <Fact icon={<MapPin size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.location} /> : null}
             {user.website ? <Fact icon={<LinkIcon size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.website.replace(/^https?:\/\//, '')} onPress={() => openLink(websiteUrl(user.website!))} /> : null}
-            <Fact icon={<Terminal size={14} color={theme.inkMuted} strokeWidth={2} />} label={`github.com/${user.username}`} onPress={() => openLink(user.github_url ?? `https://github.com/${user.username}`)} />
+            <Fact icon={<Terminal size={14} color={theme.inkMuted} strokeWidth={2} />} label={`github.com/${user.handle}`} onPress={() => openLink(user.github_url ?? `https://github.com/${user.handle}`)} />
             {user.created_at ? <Fact icon={<CalendarDays size={14} color={theme.inkMuted} strokeWidth={2} />} label={`Joined ${joined(user.created_at)}`} /> : null}
           </View>
 

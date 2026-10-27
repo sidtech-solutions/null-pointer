@@ -7,9 +7,9 @@ import { Radius, useTheme } from '@/constants/theme';
 import { sizedAvatarUrl } from '@/lib/avatar-url';
 import type { User } from '@/lib/types';
 
-export function Avatar({ user, size = 40, lane, dashed = false }: { user: Pick<User, 'name' | 'username' | 'avatar_url'>; size?: number; lane?: string; dashed?: boolean }) {
+export function Avatar({ user, size = 40, lane, dashed = false }: { user: Pick<User, 'name' | 'handle' | 'avatar_url'>; size?: number; lane?: string; dashed?: boolean }) {
   const theme = useTheme();
-  const initial = (user.name || user.username || '?').trim().charAt(0).toUpperCase();
+  const initial = (user.name || user.handle || '?').trim().charAt(0).toUpperCase();
 
   // Fetched at the drawn size, in device pixels, as the web does: a 40pt avatar needs no 460px JPEG.
   const uri = user.avatar_url ? sizedAvatarUrl(user.avatar_url, size * PixelRatio.get()) : null;

@@ -40,8 +40,8 @@ export function CommitCard({ commit, width }: { commit: Commit; width: number })
       <View style={styles.header}>
         <Avatar user={commit.author} size={44} lane={lane} />
         <View style={styles.identity}>
-          <Text variant="name" numberOfLines={1} style={styles.name}>{commit.author.name || commit.author.username}</Text>
-          <Text variant="mono" muted numberOfLines={1}>@{commit.author.username} · {longDate(commit.created_at)}</Text>
+          <Text variant="name" numberOfLines={1} style={styles.name}>{commit.author.name || commit.author.handle}</Text>
+          <Text variant="mono" muted numberOfLines={1}>@{commit.author.handle} · {longDate(commit.created_at)}</Text>
         </View>
       </View>
 
@@ -63,7 +63,7 @@ export function CommitCard({ commit, width }: { commit: Commit; width: number })
       {commit.quoted_commit && (
         <View style={[styles.quoted, { borderColor: theme.hairline }]}>
           <Text variant="mono" muted numberOfLines={1}>
-            {commit.quoted_commit.author?.name || commit.quoted_commit.author?.username} · @{commit.quoted_commit.author?.username}
+            {commit.quoted_commit.author?.name || commit.quoted_commit.author?.handle} · @{commit.quoted_commit.author?.handle}
           </Text>
           <CommitBody body={commit.quoted_commit.body} segments={commit.quoted_commit.body_segments} size={15} numberOfLines={6} />
         </View>
@@ -72,7 +72,7 @@ export function CommitCard({ commit, width }: { commit: Commit; width: number })
       <View style={[styles.footer, { borderTopColor: theme.hairline }]}>
         <View style={styles.footerLeft}>
           <View style={[styles.dot, { backgroundColor: lane }]} />
-          <Text variant="mono" muted numberOfLines={1}>@{commit.author.username}/{commit.short_hash || shortHash(commit.id)}</Text>
+          <Text variant="mono" muted numberOfLines={1}>@{commit.author.handle}/{commit.short_hash || shortHash(commit.id)}</Text>
         </View>
         <View style={styles.footerRight}>
           {(commit.stars_count > 0 || commit.replies_count > 0) && (

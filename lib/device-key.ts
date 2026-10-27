@@ -47,6 +47,22 @@ export async function currentKey(): Promise<SshKey> {
   return key;
 }
 
+/**
+ * Stores the given seed as this phone's key, replacing whatever was there.
+ * Used by reviewer access, where the key is already approved on devnull.
+ */
+export async function adoptKey(seed: Uint8Array): Promise<SshKey> {
+  const key = SshKey.fromSeed(seed);
+
+  await SecureStore.setItemAsync(StorageKey, toBase64(key.seedBytes()), {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+  });
+
+  loaded = key;
+
+  return key;
+}
+
 export async function forgetKey(): Promise<void> {
   loaded = null;
   await SecureStore.deleteItemAsync(StorageKey);

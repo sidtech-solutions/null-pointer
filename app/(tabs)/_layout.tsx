@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Bell, GitCommitVertical, MessagesSquare, UserRound } from 'lucide-react-native';
 import { type ColorValue, StyleSheet, View } from 'react-native';
 
+import { TermsGate } from '@/components/terms-gate';
 import { Fonts, laneColor, Radius, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api } from '@/lib/client';
@@ -35,20 +36,25 @@ export default function TabLayout() {
     };
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: accent,
-        tabBarInactiveTintColor: theme.inkMuted,
-        tabBarStyle: { backgroundColor: theme.surface, borderTopColor: theme.hairline, borderTopWidth: StyleSheet.hairlineWidth },
-        tabBarLabelStyle: { fontFamily: Fonts.sans, fontSize: 12 },
-        sceneStyle: { backgroundColor: theme.surface },
-      }}>
-      <Tabs.Screen name="index" options={{ title: 'Log', tabBarIcon: icon(GitCommitVertical) }} />
-      <Tabs.Screen name="notifications" options={{ title: 'Notifications', tabBarIcon: icon(Bell), tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined, tabBarBadgeStyle: badgeStyle }} />
-      <Tabs.Screen name="remotes" options={{ title: 'Remotes', tabBarIcon: icon(MessagesSquare), tabBarBadge: unreadRemotes > 0 ? (unreadRemotes > 99 ? '99+' : unreadRemotes) : undefined, tabBarBadgeStyle: badgeStyle }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon(UserRound) }} />
-    </Tabs>
+    <>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: accent,
+          tabBarInactiveTintColor: theme.inkMuted,
+          tabBarStyle: { backgroundColor: theme.surface, borderTopColor: theme.hairline, borderTopWidth: StyleSheet.hairlineWidth },
+          tabBarLabelStyle: { fontFamily: Fonts.sans, fontSize: 12 },
+          sceneStyle: { backgroundColor: theme.surface },
+        }}>
+        <Tabs.Screen name="index" options={{ title: 'Log', tabBarIcon: icon(GitCommitVertical) }} />
+        <Tabs.Screen name="notifications" options={{ title: 'Notifications', tabBarIcon: icon(Bell), tabBarBadge: unread > 0 ? (unread > 99 ? '99+' : unread) : undefined, tabBarBadgeStyle: badgeStyle }} />
+        <Tabs.Screen name="remotes" options={{ title: 'Remotes', tabBarIcon: icon(MessagesSquare), tabBarBadge: unreadRemotes > 0 ? (unreadRemotes > 99 ? '99+' : unreadRemotes) : undefined, tabBarBadgeStyle: badgeStyle }} />
+        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon(UserRound) }} />
+      </Tabs>
+
+      {/* Over everything until the terms in force are accepted. */}
+      <TermsGate me={me.data} />
+    </>
   );
 }
 

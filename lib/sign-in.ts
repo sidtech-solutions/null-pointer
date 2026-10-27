@@ -57,7 +57,8 @@ export function deviceName(): string {
   return `devnull on ${model ? model : 'a phone'}`;
 }
 
-export async function signInWithGitHub(key: SshKey, baseUrl: string): Promise<SignInOutcome> {
+/** `acceptedTerms` says the person ticked the box for the terms and privacy policy the screen linked to. */
+export async function signInWithGitHub(key: SshKey, baseUrl: string, acceptedTerms: boolean): Promise<SignInOutcome> {
   const attempt = SignInAttempt.start();
 
   const result = await WebBrowser.openAuthSessionAsync(attempt.authorizeUrl(baseUrl, key.fingerprint(), deviceName()), RedirectUri, {
@@ -92,7 +93,15 @@ export async function signInWithGitHub(key: SshKey, baseUrl: string): Promise<Si
   }
 
   try {
-    return { type: 'signed-in', user: await api.redeemSignIn(code, attempt.codeVerifier()) };
+    const me = await api.redeemSignIn(code, attempt.codeVerifier());
+
+    // The links went to the live pages, so what was ticked is the version in force. If recording it fails the sign-in
+    // still stands and the tabs ask again.
+    if (acceptedTerms && !me.terms_accepted && me.terms_version) {
+      await api.acceptTerms(me.terms_version).catch(() => undefined);
+    }
+
+    return { type: 'signed-in', user: me.user };
   } catch (exception) {
     return { type: 'error', message: exception instanceof ApiError ? exception.firstError() : String(exception) };
   }

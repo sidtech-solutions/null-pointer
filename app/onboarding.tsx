@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { NullPointerLogo } from '@/components/mark';
+import { TermsConsent } from '@/components/terms-consent';
 import { Text } from '@/components/text';
 import { Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
@@ -21,6 +22,7 @@ export default function Onboarding() {
   const [key, setKey] = useState<SshKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,7 +73,7 @@ export default function Onboarding() {
     setBusy(true);
 
     try {
-      const outcome = await signInWithGitHub(key, baseUrl());
+      const outcome = await signInWithGitHub(key, baseUrl(), agreed);
 
       if (outcome.type === 'signed-in') {
         await account.signIn(outcome.user);
@@ -96,7 +98,9 @@ export default function Onboarding() {
       <View style={styles.footer}>
         {error && <Text variant="mono" muted style={styles.fatal}>{error}</Text>}
 
-        <Button title={error ? 'Try again' : 'Sign in with GitHub'} onPress={signIn} busy={busy} disabled={key === null} size="lg" />
+        <TermsConsent checked={agreed} onChange={setAgreed} />
+
+        <Button title={error ? 'Try again' : 'Sign in with GitHub'} onPress={signIn} busy={busy} disabled={key === null || !agreed} size="lg" />
 
         <Text variant="small" muted style={styles.how}>
           This opens dev-null.sh in your browser. Sign in with GitHub there if you aren’t already, then approve this phone’s key. No password is ever typed into the app.

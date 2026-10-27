@@ -137,6 +137,11 @@ export type CurrentUser = {
   automatic_lane: number | null;
   pasteis_mode: boolean;
   github_synced_at: string | null;
+  /** The terms and privacy policy in force, as the moment they took effect; null if the server predates them. */
+  terms_version: string | null;
+  terms_accepted_at: string | null;
+  /** False once a newer version is in force than the one accepted, or nothing was accepted yet. */
+  terms_accepted: boolean;
   apple_linked: boolean;
   pasteis_remaining: number | null;
   pasteis_resets_at: string | null;

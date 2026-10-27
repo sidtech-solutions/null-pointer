@@ -161,6 +161,10 @@ function currentUser(json: any): CurrentUser {
     automatic_lane: typeof data.automatic_lane === 'number' ? data.automatic_lane : null,
     pasteis_mode: data.pasteis_mode === true,
     github_synced_at: typeof data.github_synced_at === 'string' ? data.github_synced_at : null,
+    terms_version: typeof data.terms_version === 'string' ? data.terms_version : null,
+    terms_accepted_at: typeof data.terms_accepted_at === 'string' ? data.terms_accepted_at : null,
+    // A server without terms yet has nothing to accept.
+    terms_accepted: typeof data.terms_version === 'string' ? data.terms_accepted === true : true,
     apple_linked: json.apple_linked === true,
     pasteis_remaining: typeof data.pasteis_remaining === 'number' ? data.pasteis_remaining : null,
     pasteis_resets_at: typeof data.pasteis_resets_at === 'string' ? data.pasteis_resets_at : null,
@@ -417,10 +421,14 @@ export const api = {
     await send('DELETE', 'me');
   },
 
-  async redeemSignIn(code: string, verifier: string): Promise<User> {
-    const json = await send('POST', 'devices', {}, { code, code_verifier: verifier });
+  /** Registers this phone's key with the code dev-null.sh sent back. Answers as `me` does. */
+  async redeemSignIn(code: string, verifier: string): Promise<CurrentUser> {
+    return currentUser(await send('POST', 'devices', {}, { code, code_verifier: verifier }));
+  },
 
-    return json.data ?? json;
+  /** Records that the person accepted the terms and privacy policy the app showed them, by the version `me` named. */
+  async acceptTerms(version: string): Promise<CurrentUser> {
+    return currentUser(await send('PUT', 'me/terms', {}, { version }));
   },
 
   /** With `since` (id of the newest commit shown), the response includes new_commits_count. */

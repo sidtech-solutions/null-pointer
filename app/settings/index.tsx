@@ -13,6 +13,7 @@ import { RailDot } from '@/components/graph-rail';
 import { Header } from '@/components/header';
 import { HslSlider } from '@/components/hsl-slider';
 import { SettingsHeading } from '@/components/settings-heading';
+import { privacyUrl, termsUrl } from '@/components/terms-consent';
 import { Text } from '@/components/text';
 import { Fonts, LaneCount, laneColor, Radius, setThemePreference, Space, type ThemePreference, themePreference, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
@@ -324,6 +325,13 @@ export default function SettingsScreen() {
           <Button title="Manage devices on dev-null.sh" variant="outline" onPress={() => openLink(`${baseUrl()}/settings/devices`)} />
           <Button title="Sign out" variant="outline" onPress={signOut} />
           <Text variant="small" muted style={styles.hint}>Deletes the key from this phone and signs you out.</Text>
+        </Section>
+
+        <Section>
+          <SettingsHeading title="Legal" description="The Terms of Service and Privacy Policy you accepted when you signed in. A new version asks you again." />
+          <Button title="Terms of Service" variant="outline" onPress={() => openLink(termsUrl())} />
+          <Button title="Privacy Policy" variant="outline" onPress={() => openLink(privacyUrl())} />
+          {me.data?.terms_accepted_at && <Text variant="small" muted style={styles.hint}>Accepted {new Date(me.data.terms_accepted_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}.</Text>}
         </Section>
 
         <Section>

@@ -188,6 +188,8 @@ export type MessageReply = { id: number; user_id: string; body: string; images_c
 
 export type MessageImage = { id: string; url: string; width: number; height: number; description: string | null };
 
+export type MessageVoice = { id: string; duration_ms: number; waveform: number[]; url: string };
+
 export type Message = {
   id: number;
   user_id: string;
@@ -198,6 +200,7 @@ export type Message = {
   reply_to?: MessageReply | null;
   link_preview?: LinkPreview | null;
   images?: MessageImage[];
+  voice?: MessageVoice | null;
   reactions?: MessageReaction[];
   /** Orgs only: a logged change rather than something someone wrote. */
   event?: OrgEvent | null;

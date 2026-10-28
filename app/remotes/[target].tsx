@@ -1,7 +1,7 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Ellipsis, ImagePlus, SendHorizontal, X } from 'lucide-react-native';
+import { ChevronLeft, Ellipsis, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActionSheetIOS, ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { MentionSuggestions } from '@/components/mention-suggestions';
 import { MessageActions } from '@/components/message-actions';
 import { EventLine, MessageBubble, PendingBubble, ReplyGhost } from '@/components/message-bubble';
 import { Text } from '@/components/text';
+import { RecordingBar, VoiceDraftStrip } from '@/components/voice-note';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
@@ -29,6 +30,7 @@ import { accessNotice, isMine, orgTitle, quickReactions, targetFromParam, target
 import { bumpRemotesUnread, removeFromInbox } from '@/lib/remotes-cache';
 import { toast } from '@/lib/toast';
 import { type Message, MessageMaxLength, type MessageReply, type OrgMember, type User } from '@/lib/types';
+import { useVoiceNote } from '@/lib/use-voice-note';
 import { type PendingMessage, useThread } from '@/lib/use-thread';
 
 type Row =
@@ -83,6 +85,10 @@ export default function ThreadScreen() {
   const [membersOpen, setMembersOpen] = useState(false);
   const [caret, setCaret] = useState(0);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const voice = useVoiceNote(setVoiceError);
+  const recording = voice.state.status === 'starting' || voice.state.status === 'recording' || voice.state.status === 'stopping';
+  const draft = voice.state.status === 'recorded' ? voice.state.draft : null;
 
   useEffect(() => {
     if (selection) {
@@ -293,7 +299,9 @@ export default function ThreadScreen() {
     Alert.alert(title, undefined, [...options.map((option) => ({ text: option.label, style: option.destructive ? ('destructive' as const) : undefined, onPress: option.run })), { text: 'Cancel', style: 'cancel' }]);
   };
 
-  const canSend = open && !attachments.picking && (body.trim() !== '' || attachments.images.length > 0) && body.length <= MessageMaxLength;
+  const canSend = open && !attachments.picking && !recording && (draft !== null || body.trim() !== '' || attachments.images.length > 0) && body.length <= MessageMaxLength;
+  // The microphone takes the send button's place while there is nothing typed or attached.
+  const offersVoice = open && body.trim() === '' && attachments.images.length === 0 && draft === null && !recording;
 
   const send = () => {
     if (!canSend) {
@@ -301,11 +309,26 @@ export default function ThreadScreen() {
     }
 
     tap();
-    thread.send(body.trim(), attachments.images, replyTo);
+
+    // A voice note goes alone; the server takes no body or images beside it.
+    const note = voice.take();
+
+    if (note) {
+      thread.send('', [], replyTo, note);
+    } else {
+      thread.send(body.trim(), attachments.images, replyTo);
+    }
+
     setBody('');
     setReplyTo(null);
     attachments.clear();
     requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
+  };
+
+  const record = () => {
+    setVoiceError(null);
+    tap();
+    void voice.start();
   };
 
   const change = (text: string) => {
@@ -463,25 +486,39 @@ export default function ThreadScreen() {
               </View>
             )}
             {attachments.error && <Text variant="mono" color={theme.destructive} style={styles.error}>{attachments.error}</Text>}
+            {voiceError && <Text variant="mono" color={theme.destructive} style={styles.error}>{voiceError}</Text>}
             <AttachmentStrip attachments={attachments} compact />
+            {draft && <VoiceDraftStrip draft={draft} onDiscard={() => void voice.discard()} />}
             <View style={styles.composer}>
-              <ToolbarButton icon={ImagePlus} label={attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per message` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={!open || attachments.picking || attachments.images.length >= MaxImages} />
-              <TextInput
-                value={body}
-                onChangeText={change}
-                onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
-                selection={selection}
-                placeholder={partner ? `Push to @${partner.handle}` : 'Push to the org'}
-                placeholderTextColor={theme.inkMuted}
-                multiline
-                maxLength={MessageMaxLength}
-                editable={open}
-                style={[styles.input, { color: theme.ink, backgroundColor: theme.wash }]}
-                accessibilityLabel="Message"
-              />
-              <Pressable onPress={send} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend ? 1 : 0.5 }]} accessibilityRole="button" accessibilityLabel="Push" accessibilityState={{ disabled: !canSend }}>
-                <SendHorizontal size={18} color={theme.primaryInk} strokeWidth={2} />
-              </Pressable>
+              {recording ? (
+                <RecordingBar durationMs={voice.durationMs} peak={voice.peak} stopping={voice.state.status !== 'recording'} onCancel={() => void voice.discard()} onStop={() => void voice.stop()} />
+              ) : (
+                <>
+                  <ToolbarButton icon={ImagePlus} label={attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per message` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={!open || attachments.picking || attachments.images.length >= MaxImages || draft !== null} />
+                  <TextInput
+                    value={body}
+                    onChangeText={change}
+                    onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
+                    selection={selection}
+                    placeholder={draft ? 'Voice note ready to push' : partner ? `Push to @${partner.handle}` : 'Push to the org'}
+                    placeholderTextColor={theme.inkMuted}
+                    multiline
+                    maxLength={MessageMaxLength}
+                    editable={open && draft === null}
+                    style={[styles.input, { color: theme.ink, backgroundColor: theme.wash }]}
+                    accessibilityLabel="Message"
+                  />
+                  {offersVoice ? (
+                    <Pressable onPress={record} style={[styles.send, { backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityLabel="Record a voice note">
+                      <Mic size={18} color={theme.ink} strokeWidth={2} />
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={send} disabled={!canSend} style={[styles.send, { backgroundColor: accent, opacity: canSend ? 1 : 0.5 }]} accessibilityRole="button" accessibilityLabel="Push" accessibilityState={{ disabled: !canSend }}>
+                      <SendHorizontal size={18} color={theme.primaryInk} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </>
+              )}
             </View>
           </>
         )}

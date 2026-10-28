@@ -8,6 +8,7 @@ import { viewerParams } from '@/lib/viewer';
 import { Avatar } from '@/components/avatar';
 import { CommitBody } from '@/components/commit-body';
 import { Text } from '@/components/text';
+import { VoiceNote } from '@/components/voice-note';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { openLink } from '@/lib/links';
 import { eventText, messageGist, reactionChips } from '@/lib/remotes';
@@ -213,13 +214,14 @@ export const MessageBubble = memo(function MessageBubble({
         accessibilityHint={handlers.onDoubleTap ? 'Long press for reactions and reply, double tap for a heart' : 'Long press for reactions and reply'}>
         {message.reply_to && <ReplyGhost reply={message.reply_to} authors={authors} tint={mine ? theme.primaryInk : theme.primary} onPress={handlers.onOpenReply ? () => handlers.onOpenReply?.(message.reply_to!.id) : undefined} />}
         {hasMedia && <Images images={message.images!} width={Math.min(bubbleWidth, 280)} />}
+        {message.voice && <VoiceNote voice={message.voice} tint={inkOnBubble} />}
         {hasBody ? (
           mine ? (
             <Text selectable color={theme.primaryInk} style={styles.bodyMine}>{message.body}</Text>
           ) : (
             <CommitBody body={message.body} segments={message.body_segments} size={15} onOpenLink={openLink} onOpenMention={handlers.onOpenAuthor ? (username) => handlers.onOpenAuthor?.({ handle: username } as User) : undefined} />
           )
-        ) : !hasMedia ? (
+        ) : !hasMedia && !message.voice ? (
           <Text variant="small" color={inkOnBubble} style={styles.voice}>Voice note · listen on dev-null.sh</Text>
         ) : null}
         {message.link_preview?.url && !message.link_preview.is_pending ? <LinkCard preview={message.link_preview} width={Math.min(bubbleWidth, 280)} /> : null}
@@ -266,6 +268,7 @@ export function PendingBubble({ message, authors, onRetry, onDiscard }: { messag
             ))}
           </View>
         )}
+        {message.voice && <VoiceNote voice={message.voice} tint={theme.primaryInk} />}
         {message.body !== '' && <Text color={theme.primaryInk} style={styles.bodyMine}>{message.body}</Text>}
         <View style={styles.meta}>
           {rejected ? (

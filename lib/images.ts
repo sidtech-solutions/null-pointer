@@ -166,3 +166,16 @@ export async function readForUpload(uri: string): Promise<{ bytes: Uint8Array; s
 
   return { bytes, sha256: toHex(new Uint8Array(digest)) };
 }
+
+/** Deletes a file the app made, such as a voice note once it is pushed or dropped. Nothing happens if it is gone. */
+export function removeFile(uri: string): void {
+  try {
+    const file = new File(uri);
+
+    if (file.exists) {
+      file.delete();
+    }
+  } catch {
+    // Already gone, or never ours to delete.
+  }
+}

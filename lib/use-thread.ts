@@ -4,16 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAccount } from './account';
 import { api, ApiError, type RemoteTarget } from './client';
-import { type Attachment, readForUpload } from './images';
+import { type Attachment, readForUpload, removeFile } from './images';
 import { hasReacted, isMine, targetKey, withOwnReaction } from './remotes';
 import { bumpRemotesUnread, patchInbox } from './remotes-cache';
 import type { Message, MessageReply, Thread } from './types';
+import type { VoiceDraft } from './voice-notes';
 
 /** A message on its way: shown at the end of the thread until the server hands it back. */
 export type PendingMessage = {
   client_id: string;
   body: string;
   images: Attachment[];
+  voice: VoiceDraft | null;
   reply_to: MessageReply | null;
   created_at: string;
   status: 'staged' | 'rejected';
@@ -180,13 +182,19 @@ export function useThread(target: RemoteTarget, active: boolean) {
             return { name: image.name, type: image.type, bytes, sha256 };
           }),
         );
+        const voice = message.voice ? { upload: { name: 'voice-note.wav', type: 'audio/wav', ...(await readForUpload(message.voice.uri)) }, waveform: message.voice.waveform } : null;
         const created = await api.sendMessage(targetRef.current, {
           clientId: message.client_id,
           body: message.body,
           replyToId: message.reply_to?.id ?? null,
           images: uploads,
           descriptions: message.images.map((image) => image.description),
+          voice,
         });
+
+        if (message.voice) {
+          removeFile(message.voice.uri);
+        }
 
         const before = queryClient.getQueryData<Thread>(queryKey)?.messages.at(-1)?.id ?? 0;
 
@@ -211,8 +219,8 @@ export function useThread(target: RemoteTarget, active: boolean) {
   );
 
   const send = useCallback(
-    (body: string, images: Attachment[], replyTo: MessageReply | null) => {
-      const message: PendingMessage = { client_id: randomUUID(), body, images, reply_to: replyTo, created_at: new Date().toISOString(), status: 'staged', error: null };
+    (body: string, images: Attachment[], replyTo: MessageReply | null, voice: VoiceDraft | null = null) => {
+      const message: PendingMessage = { client_id: randomUUID(), body, images, voice, reply_to: replyTo, created_at: new Date().toISOString(), status: 'staged', error: null };
 
       lastTyping.current = 0;
       setPending((list) => [...list, message]);
@@ -236,7 +244,19 @@ export function useThread(target: RemoteTarget, active: boolean) {
     [deliver],
   );
 
-  const discard = useCallback((clientId: string) => setPending((list) => list.filter((candidate) => candidate.client_id !== clientId)), []);
+  const discard = useCallback(
+    (clientId: string) =>
+      setPending((list) => {
+        const dropped = list.find((candidate) => candidate.client_id === clientId);
+
+        if (dropped?.voice) {
+          removeFile(dropped.voice.uri);
+        }
+
+        return list.filter((candidate) => candidate.client_id !== clientId);
+      }),
+    [],
+  );
 
   const loadOlder = useCallback(async () => {
     const current = queryClient.getQueryData<Thread>(queryKey);

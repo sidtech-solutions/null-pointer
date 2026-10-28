@@ -83,8 +83,8 @@ function part(name: string, type: string, bytes: Uint8Array): Blob {
 
 // Query string and body are built here and sent as the exact bytes that were signed.
 // With uploads the request is multipart: the JSON in a `payload` file part, the
-// files in `images[]`, nothing else, and the signature covers the files' hashes.
-async function send(method: string, path: string, query: Query = {}, payload?: unknown, uploads?: Upload[]): Promise<any> {
+// files in `images[]` or the one voice note in `voice`, nothing else, and the signature covers the files' hashes.
+async function send(method: string, path: string, query: Query = {}, payload?: unknown, uploads?: Upload[], field: 'images[]' | 'voice' = 'images[]'): Promise<any> {
   const key = await currentKey();
   const requestTarget = target(path, query);
   const body = payload === undefined ? '' : JSON.stringify(payload);
@@ -100,7 +100,7 @@ async function send(method: string, path: string, query: Query = {}, payload?: u
   if (withUploads) {
     const form = new FormData();
     form.append('payload', part('payload.json', 'application/json', utf8(body)));
-    uploads.forEach((upload) => form.append('images[]', part(upload.name, upload.type, upload.bytes)));
+    uploads.forEach((upload) => form.append(field, part(upload.name, upload.type, upload.bytes)));
     request = { method, headers, body: form };
   } else if (payload !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -242,8 +242,9 @@ export const api = {
   },
 
   /** Sending the same clientId again, as a retry does, answers with the message already created. */
-  async sendMessage(target: RemoteTarget, message: { clientId: string; body: string; replyToId?: number | null; images?: Upload[]; descriptions?: string[] }): Promise<Message> {
-    const payload: Record<string, unknown> = { body: message.body, client_id: message.clientId };
+  /** A voice note goes alone: no body and no images, the WAV in a `voice` part and its bars beside it. */
+  async sendMessage(target: RemoteTarget, message: { clientId: string; body: string; replyToId?: number | null; images?: Upload[]; descriptions?: string[]; voice?: { upload: Upload; waveform: number[] } | null }): Promise<Message> {
+    const payload: Record<string, unknown> = message.voice ? { client_id: message.clientId, voice_waveform: message.voice.waveform } : { body: message.body, client_id: message.clientId };
 
     if (message.replyToId) {
       payload.reply_to_id = message.replyToId;
@@ -253,7 +254,7 @@ export const api = {
       payload.image_descriptions = message.images.map((_, index) => message.descriptions?.[index] || null);
     }
 
-    const json = await send('POST', `${remotePath(target)}/messages`, {}, payload, message.images);
+    const json = await send('POST', `${remotePath(target)}/messages`, {}, payload, message.voice ? [message.voice.upload] : message.images, message.voice ? 'voice' : 'images[]');
 
     return json.data ?? json;
   },

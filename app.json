@@ -88,12 +88,25 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
+      "expo-audio",
+      [
+        "@siteed/audio-studio",
+        {
+          "enablePhoneStateHandling": false,
+          "enableNotifications": false,
+          "enableBackgroundAudio": false,
+          "enableDeviceDetection": false,
+          "iosConfig": {
+            "microphoneUsageDescription": "null-pointer uses the microphone to record voice notes for Remotes."
+          }
+        }
+      ],
       [
         "expo-image-picker",
         {
           "photosPermission": "null-pointer uses your photos to attach images to a commit.",
           "cameraPermission": "null-pointer uses the camera to take a photo for a commit.",
-          "microphonePermission": false
+          "microphonePermission": "null-pointer uses the microphone to record voice notes for Remotes."
         }
       ],
       "./plugins/with-unsigned-release",

@@ -40,10 +40,14 @@ jobs:
       - run: npx jest --ci
 
   android:
-    name: android apk
+    name: android ${{ matrix.target }}
     runs-on: bladerunner-linux
     needs: check
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [arm64-v8a, armeabi-v7a, x86_64, aab]
     env:
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
@@ -104,21 +108,28 @@ jobs:
           done
           exit 1
 
-      - name: Build release APK and AAB (unsigned)
-        run: cd android && ./gradlew assembleRelease bundleRelease --no-daemon
+      - name: Build release APK for ${{ matrix.target }} (unsigned)
+        if: matrix.target != 'aab'
+        run: cd android && ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=${{ matrix.target }}
+
+      - name: Build release AAB (unsigned, every ABI)
+        if: matrix.target == 'aab'
+        run: cd android && ./gradlew bundleRelease --no-daemon
 
       - uses: actions/setup-python@v5
+        if: matrix.target != 'aab'
         with:
           python-version: '3.12'
 
       - name: Pin R8 pg-map-id in the APK
+        if: matrix.target != 'aab'
         run: |
           pip install --quiet 'git+https://gitlab.com/fdroid/reproducible-apk-tools.git@ca728486d42a79f1c9ec0c6ec755c39f251911a8'
           repro-apk-inplace-fix --internal --zipalign --page-size 16 fix-pg-map-id \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
             79fbe02c536c0d7d313189437f3e697188963895b68d4840a060177ec4e9bd95
 
-      - name: Sign the APK and AAB
+      - name: Sign the ${{ matrix.target }} build
         run: |
           mkdir -p out
           if [ "$HAS_KEYSTORE" = 'true' ]; then
@@ -129,30 +140,27 @@ jobs:
             KS=android/app/debug.keystore
             ALIAS=androiddebugkey
             export KS_PASS=android KEY_PASS=android
-            echo "::notice::APK and AAB are signed with the debug keystore (no ANDROID_KEYSTORE_BASE64 secret)."
+            echo "::notice::Signed with the debug keystore (no ANDROID_KEYSTORE_BASE64 secret)."
           fi
-          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
-          "$APKSIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --ks-key-alias "$ALIAS" --key-pass env:KEY_PASS \
-            --out "out/null-pointer-${{ inputs.label }}.apk" android/app/build/outputs/apk/release/app-release-unsigned.apk
-          "$APKSIGNER" verify --print-certs "out/null-pointer-${{ inputs.label }}.apk" | grep -i 'SHA-256'
-          jarsigner -keystore "$KS" -storepass "$KS_PASS" -keypass "$KEY_PASS" \
-            -signedjar "out/null-pointer-${{ inputs.label }}.aab" android/app/build/outputs/bundle/release/app-release.aab "$ALIAS"
+          if [ "$TARGET" = 'aab' ]; then
+            jarsigner -keystore "$KS" -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+              -signedjar "out/null-pointer-${{ inputs.label }}.aab" android/app/build/outputs/bundle/release/app-release.aab "$ALIAS"
+          else
+            APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+            "$APKSIGNER" sign --ks "$KS" --ks-pass env:KS_PASS --ks-key-alias "$ALIAS" --key-pass env:KEY_PASS \
+              --out "out/null-pointer-${{ inputs.label }}-$TARGET.apk" android/app/build/outputs/apk/release/app-release-unsigned.apk
+            "$APKSIGNER" verify --print-certs "out/null-pointer-${{ inputs.label }}-$TARGET.apk" | grep -i 'SHA-256'
+          fi
         env:
+          TARGET: ${{ matrix.target }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: out/*.apk
-          if-no-files-found: error
-          retention-days: 14
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-aab
-          path: out/*.aab
+          name: android-${{ matrix.target }}
+          path: out/*
           if-no-files-found: error
           retention-days: 14
 

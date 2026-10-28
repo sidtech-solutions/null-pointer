@@ -69,7 +69,7 @@ jobs:
           body: |
             Build number: `${{ github.run_number }}`
           files: |
-            artifacts/android-apk/*.apk
+            artifacts/android-*/*.apk
             artifacts/android-aab/*.aab
             artifacts/ios-ipa/*.ipa
 

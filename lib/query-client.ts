@@ -61,9 +61,17 @@ export const persister = createSyncStoragePersister({
     },
   },
   key: 'devnull.responses',
-  throttleTime: 2_000,
+  throttleTime: 20_000,
   serialize: (client) => JSON.stringify(trim(client)),
 });
+
+export async function refetchFromTop(queryKey: readonly unknown[]): Promise<void> {
+  queryClient.setQueryData<{ pages: unknown[]; pageParams: unknown[] }>(queryKey, (data) =>
+    data && data.pages.length > 1 ? { pages: data.pages.slice(0, 1), pageParams: data.pageParams.slice(0, 1) } : data,
+  );
+
+  await queryClient.refetchQueries({ queryKey, exact: true });
+}
 
 // TanStack's focus signal defaults to the browser; map it to AppState so polls stop in the background.
 export function wireAppState(): () => void {

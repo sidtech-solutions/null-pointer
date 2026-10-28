@@ -14,6 +14,7 @@ import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
+import { refetchFromTop } from '@/lib/query-client';
 import { conversationTitle, summaryKey, targetOf, targetParam } from '@/lib/remotes';
 import { bumpRemotesUnread, removeFromInbox, setRemotesUnread } from '@/lib/remotes-cache';
 import { toast } from '@/lib/toast';
@@ -210,7 +211,7 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
     setRefreshing(true);
 
     try {
-      await Promise.all([query.refetch(), onRefreshMe()]);
+      await Promise.all([refetchFromTop(['remotes', tab, term]), onRefreshMe()]);
     } finally {
       setRefreshing(false);
     }

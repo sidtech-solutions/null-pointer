@@ -143,7 +143,7 @@ export default function ComposeScreen() {
       prependCommit(queryClient, created);
       queryClient.invalidateQueries({ queryKey: ['log'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
-      refreshStreakWidget();
+      refreshStreakWidget({ force: true });
       router.back();
       toast(`[log ${created.short_hash || shortHash(created.id)}] ${(created.body || (created.images?.length ? `${created.images.length} ${created.images.length === 1 ? 'image' : 'images'}` : '')).split('\n')[0].slice(0, 60)}`);
     },

@@ -22,8 +22,25 @@ function writeIosWidget(data: WidgetData | null): void {
   }
 }
 
-/** Redraws the home screen widget with fresh numbers; nothing on platforms without one. */
-export function refreshStreakWidget(): void {
+/** The widget redraws from the network at most this often unless something the person did changes it. */
+const RefreshEvery = 15 * 60 * 1000;
+
+let lastRefresh = 0;
+
+/**
+ * Redraws the home screen widget with fresh numbers; nothing on platforms without one. Each redraw is three API
+ * calls and a native render, so routine callers (the tabs, as `me` refetches every half minute) are held to one
+ * every fifteen minutes; `force` is for a commit the person just made, which changes the streak right away.
+ */
+export function refreshStreakWidget({ force = false }: { force?: boolean } = {}): void {
+  const now = Date.now();
+
+  if (!force && now - lastRefresh < RefreshEvery) {
+    return;
+  }
+
+  lastRefresh = now;
+
   if (Platform.OS === 'ios') {
     loadWidgetData()
       .then(writeIosWidget)
@@ -55,6 +72,7 @@ export function refreshStreakWidget(): void {
 /** On sign-out the widget forgets the account and says so. */
 export function clearStreakWidget(): void {
   forgetWidgetData();
+  lastRefresh = 0;
 
   if (Platform.OS === 'ios') {
     writeIosWidget(null);

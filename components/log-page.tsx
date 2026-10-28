@@ -15,6 +15,7 @@ import { SkeletonRow } from '@/components/skeleton-row';
 import { useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, nextCursor, Unauthenticated } from '@/lib/client';
+import { refetchFromTop } from '@/lib/query-client';
 import { firstSeenId, rememberVisit, seenAt } from '@/lib/last-visit';
 import { useNow } from '@/lib/now';
 import { feedRows } from '@/lib/timeline';
@@ -52,6 +53,7 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
     initialPageParam: null as string | null,
     getNextPageParam: (last) => nextCursor(last),
     enabled: account.status === 'signed-in',
+    refetchOnWindowFocus: false,
   });
 
   const commits = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
@@ -153,12 +155,12 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
         data && data.pages.length > 0 ? { ...data, pages: [{ ...data.pages[0], data: [...held.commits, ...data.pages[0].data] }, ...data.pages.slice(1)] } : data,
       );
     } else {
-      query.refetch();
+      void refetchFromTop(['log', log]);
     }
 
     setHeld({ commits: [], count: 0, more: false });
     list.current?.scrollToOffset({ offset: 0, animated: true });
-  }, [held, log, query, queryClient]);
+  }, [held, log, queryClient]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -166,11 +168,11 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
     setMarker(null);
 
     try {
-      await query.refetch();
+      await refetchFromTop(['log', log]);
     } finally {
       setRefreshing(false);
     }
-  }, [query]);
+  }, [log]);
 
   const items = useMemo(() => feedItems(feedRows(commits, now, log !== 'trending', marker), threads), [commits, now, log, marker, threads]);
   const refreshFailed = query.isError && commits.length > 0;

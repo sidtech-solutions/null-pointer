@@ -56,7 +56,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # Explicit packages: the action's default list includes the retired `tools`
       # package, which sdkmanager 16+ rejects. Versions match react-native/gradle/libs.versions.toml.
@@ -72,6 +72,14 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Drop expo-dev-client from the release build
+        run: rm -rf node_modules/expo-dev-client node_modules/expo-dev-launcher node_modules/expo-dev-menu node_modules/expo-dev-menu-interface
+
+      - name: Build with JDK 21
+        run: |
+          sed -i '/jvmToolchain\|JavaVersion/s/17/21/' node_modules/@react-native/gradle-plugin/*/build.gradle.kts \
+            node_modules/@react-native/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/utils/JdkConfiguratorUtils.kt
 
       - name: Version from tag
         if: inputs.version != ''
@@ -127,7 +135,7 @@ jobs:
           pip install --quiet 'git+https://gitlab.com/fdroid/reproducible-apk-tools.git@ca728486d42a79f1c9ec0c6ec755c39f251911a8'
           repro-apk-inplace-fix --internal --zipalign --page-size 16 fix-pg-map-id \
             android/app/build/outputs/apk/release/app-release-unsigned.apk \
-            79fbe02c536c0d7d313189437f3e697188963895b68d4840a060177ec4e9bd95
+            0000000000000000000000000000000000000000000000000000000000000000
 
       - name: Sign the ${{ matrix.target }} build
         run: |

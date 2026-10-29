@@ -56,8 +56,8 @@ npm test   # the signing test needs ssh-keygen on PATH
 
 | Workflow | Trigger | Output |
 | --- | --- | --- |
-| `pr.yml` | pull request to `main` | lint, typecheck, tests, Android APK + AAB, iOS IPA as artifacts |
-| `main.yml` | push to `main` | same |
+| `pr.yml` | pull request to `master` | lint, typecheck, tests, Android APK + AAB, iOS IPA as artifacts |
+| `master.yml` | push to `master` | same |
 | `release.yml` | tag `v*` | same, stamped with the tag version, plus a GitHub release and a TestFlight upload |
 
 All three call `build.yml`. Jobs run on self-hosted runners (`bladerunner-linux`, `bladerunner-macos`). 

@@ -1,8 +1,8 @@
-name: main
+name: master
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,4 +16,4 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      label: main-${{ github.run_number }}
+      label: master-${{ github.run_number }}

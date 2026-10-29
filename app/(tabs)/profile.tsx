@@ -27,7 +27,7 @@ export default function ProfileScreen() {
           </Pressable>
         }
       />
-      <ProfileView username={username} onOpenConnections={(type) => router.push({ pathname: '/users/[username]/[type]', params: { username, type } })} onOpenStarred={() => router.push('/starred')} />
+      <ProfileView username={username} onOpenConnections={(type) => router.push({ pathname: '/users/[username]/[type]', params: { username, type } })} onOpenStarred={() => router.push('/starred')} onOpenScheduled={() => router.push('/scheduled')} />
     </View>
   );
 }

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 
 import { useAccount } from './account';
 import { api, ApiError } from './client';
+import { insertIssue, issueReferenceBeforeCaret, type IssueToken } from './issue-reference';
 import { insertMention, mentionBeforeCaret, type MentionToken } from './mention-token';
-import type { User } from './types';
+import type { IssueSuggestion, User } from './types';
 
-export { insertMention, mentionBeforeCaret, type MentionToken };
+export { insertIssue, insertMention, issueReferenceBeforeCaret, type IssueToken, mentionBeforeCaret, type MentionToken };
 
 function matches(user: User, term: string): boolean {
   const needle = term.toLowerCase();
@@ -110,4 +111,32 @@ export function useMentionSuggestions(token: MentionToken | null, context: Menti
   const pool = searched.data ?? following.data ?? [];
 
   return rank(pool.filter((user) => String(user.id) !== String(me?.id)), token.term);
+}
+
+/** The /dev/null issue with the number being typed, once the typing pauses; null while there is none to show. */
+export function useIssueSuggestion(token: IssueToken | null): IssueSuggestion | null {
+  const account = useAccount();
+  const [number, setNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (token === null) {
+      setNumber(null);
+
+      return;
+    }
+
+    const timer = setTimeout(() => setNumber(token.query), 250);
+
+    return () => clearTimeout(timer);
+  }, [token?.query, token === null]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const issue = useQuery({
+    queryKey: ['issue', number],
+    queryFn: () => api.issueSuggestion(number ?? ''),
+    enabled: account.status === 'signed-in' && number !== null,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  return token !== null && number === token.query ? (issue.data ?? null) : null;
 }

@@ -10,6 +10,7 @@ import 'react-native-reanimated';
 
 import { applyThemePreference, useTheme } from '@/constants/theme';
 import { ReportSheet } from '@/components/report-sheet';
+import { OptionsHost } from '@/components/options-host';
 import { ToastHost } from '@/components/toast-host';
 import { AccountProvider, useAccount } from '@/lib/account';
 import { reportCommit, useReporting } from '@/lib/report-store';
@@ -126,8 +127,12 @@ function RootLayoutNav() {
         <Stack.Screen name="remotes/new" />
         <Stack.Screen name="users/[username]/index" />
         <Stack.Screen name="users/[username]/[type]" />
+        <Stack.Screen name="orgs/[handle]" />
         <Stack.Screen name="settings/index" />
         <Stack.Screen name="settings/safety" />
+        <Stack.Screen name="settings/devices" />
+        <Stack.Screen name="settings/language" />
+        <Stack.Screen name="scheduled" />
         <Stack.Screen name="starred" />
         <Stack.Screen name="search" />
         <Stack.Screen name="card/[id]" options={{ presentation: 'modal' }} />
@@ -135,6 +140,7 @@ function RootLayoutNav() {
         <Stack.Screen name="image" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ReportSheet commit={reporting} onClose={() => reportCommit(null)} />
+      <OptionsHost />
       <ToastHost />
     </ThemeProvider>
   );

@@ -1,9 +1,9 @@
 import { FlashList } from '@shopify/flash-list';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, ChevronLeft, Search, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
@@ -24,17 +24,21 @@ const Modes: { key: Mode; label: string }[] = [
   { key: 'org', label: 'Org' },
 ];
 
-/** Picks someone to push to, or a few people and a name for a new org. */
+/** Picks someone to push to, a few people and a name for a new org, or, with `org`, people to add to that org. */
 export default function NewRemoteScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const keyboardShown = useKeyboardShown();
-  const [mode, setMode] = useState<Mode>('remote');
+  const queryClient = useQueryClient();
+  const { org } = useLocalSearchParams<{ org?: string }>();
+  const adding = typeof org === 'string' && org !== '';
+  const [mode, setMode] = useState<Mode>(adding ? 'org' : 'remote');
   const [search, setSearch] = useState('');
   const [term, setTerm] = useState('');
   const [picked, setPicked] = useState<User[]>([]);
   const [name, setName] = useState('');
+  const [shareHistory, setShareHistory] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => setTerm(search.trim()), 250);
@@ -43,10 +47,20 @@ export default function NewRemoteScreen() {
   }, [search]);
 
   const candidates = useQuery({
-    queryKey: ['remote-candidates', mode, term],
-    queryFn: () => api.remoteCandidates(term, { forOrg: mode === 'org' }),
+    queryKey: ['remote-candidates', mode, term, adding ? org : null],
+    queryFn: () => api.remoteCandidates(term, { forOrg: mode === 'org', org: adding ? org : null }),
     staleTime: 30_000,
     placeholderData: (previous) => previous,
+  });
+
+  const add = useMutation({
+    mutationFn: () => api.addOrgMembers(org ?? '', picked.map((user) => user.handle), shareHistory),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['remote-thread'] });
+      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+      router.back();
+    },
+    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not add them.'),
   });
 
   const create = useMutation({
@@ -81,6 +95,7 @@ export default function NewRemoteScreen() {
 
   const list = candidates.data ?? [];
   const canCreate = picked.length > 0 && name.length <= OrgLimits.maxNameLength && !create.isPending;
+  const canAdd = picked.length > 0 && !add.isPending;
 
   return (
     <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface }]}>
@@ -90,10 +105,10 @@ export default function NewRemoteScreen() {
             <Pressable onPress={() => router.back()} hitSlop={8} style={styles.back} accessibilityRole="button" accessibilityLabel="Back">
               <ChevronLeft size={24} color={theme.ink} strokeWidth={2} />
             </Pressable>
-            <Text variant="name" style={styles.title}>{mode === 'remote' ? 'New remote' : 'New org'}</Text>
+            <Text variant="name" style={styles.title}>{adding ? 'Add people' : mode === 'remote' ? 'New remote' : 'New org'}</Text>
           </View>
         }
-        tabs={Modes}
+        tabs={adding ? undefined : Modes}
         active={mode}
         onChange={setMode}
       />
@@ -163,11 +178,24 @@ export default function NewRemoteScreen() {
         }
       />
 
-      {mode === 'org' && (
+      {adding ? (
         <View style={[styles.footer, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
-          <TextInput value={name} onChangeText={setName} placeholder="Org name (optional)" placeholderTextColor={theme.inkMuted} maxLength={OrgLimits.maxNameLength} style={[styles.nameInput, { color: theme.ink, backgroundColor: theme.wash }]} accessibilityLabel="Org name" />
-          <Button title={picked.length === 0 ? 'Create org' : `Create org with ${picked.length}`} busy={create.isPending} disabled={!canCreate} onPress={() => create.mutate()} />
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleText}>
+              <Text variant="label">Share the history</Text>
+              <Text variant="small" muted>They see everything pushed so far. Off, only what comes after they join.</Text>
+            </View>
+            <Switch value={shareHistory} onValueChange={setShareHistory} trackColor={{ true: theme.primary }} accessibilityLabel="Share the history" />
+          </View>
+          <Button title={picked.length === 0 ? 'Add people' : `Add ${picked.length}`} busy={add.isPending} disabled={!canAdd} onPress={() => add.mutate()} />
         </View>
+      ) : (
+        mode === 'org' && (
+          <View style={[styles.footer, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
+            <TextInput value={name} onChangeText={setName} placeholder="Org name (optional)" placeholderTextColor={theme.inkMuted} maxLength={OrgLimits.maxNameLength} style={[styles.nameInput, { color: theme.ink, backgroundColor: theme.wash }]} accessibilityLabel="Org name" />
+            <Button title={picked.length === 0 ? 'Create org' : `Create org with ${picked.length}`} busy={create.isPending} disabled={!canCreate} onPress={() => create.mutate()} />
+          </View>
+        )
       )}
     </KeyboardAvoidingView>
   );
@@ -191,4 +219,6 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 32, alignItems: 'center' },
   footer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter, paddingTop: 8, gap: 8 },
   nameInput: { height: 40, paddingHorizontal: 12, borderRadius: Radius.lg, fontSize: 15 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  toggleText: { flex: 1 },
 });

@@ -76,9 +76,13 @@ export function useThread(target: RemoteTarget, active: boolean) {
         const known = new Set(current.messages.map((message) => message.id));
         const kept = current.messages.map((message) => (changed.has(message.id) ? { ...message, reactions: changed.get(message.id) } : message));
 
+        // A poll that found the org's pins unchanged says null; the ones already shown stay.
+        const pinned = current.kind === 'org' && fresh.kind === 'org' ? { pinned: fresh.pinned ?? current.pinned } : {};
+
         return {
           ...current,
           ...fresh,
+          ...pinned,
           messages: byId([...kept, ...fresh.messages.filter((message) => !known.has(message.id))]),
           has_older: current.has_older,
           reaction_changes: [],
@@ -341,7 +345,16 @@ export function useThread(target: RemoteTarget, active: boolean) {
     api.remoteTyping(targetRef.current).catch(() => {});
   }, []);
 
-  return { thread: query.data, isPending: query.isPending, error: query.error, refetch: query.refetch, patch, pending, send, retry, discard, loadOlder, loadingOlder, react, markRead, ping };
+  /** A message the server just made for this thread (a ping, say) goes in as if a poll had brought it. */
+  const absorbMessage = useCallback(
+    (message: Message) => {
+      patch((current) => (current.messages.some((existing) => existing.id === message.id) ? current : { ...current, messages: byId([...current.messages, message]) }));
+      lastActivity.current = Date.now();
+    },
+    [patch],
+  );
+
+  return { thread: query.data, isPending: query.isPending, error: query.error, refetch: query.refetch, patch, pending, send, retry, discard, loadOlder, loadingOlder, react, markRead, ping, absorbMessage };
 }
 
 export type ThreadHandle = ReturnType<typeof useThread>;

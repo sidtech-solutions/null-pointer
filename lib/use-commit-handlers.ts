@@ -10,6 +10,7 @@ import { shortHash } from '@/lib/display';
 import { tap } from '@/lib/haptics';
 import { reportCommit } from '@/lib/report-store';
 import { toast } from '@/lib/toast';
+import { translationLanguage } from '@/lib/translation';
 import type { Commit, Page, Profile } from '@/lib/types';
 
 import { useAccount } from './account';
@@ -38,15 +39,52 @@ export function useCommitHandlers(): CommitHandlers {
     },
   });
 
+  // The server keeps a deleted commit for 30 s; the toast offers Undo for a little less, so a late tap never fails.
+  const restore = useMutation({
+    mutationFn: (commit: Commit) => api.restoreCommit(commit.id),
+    onSuccess: (restored, commit) => {
+      toast(`Restored ${restored.short_hash || commit.short_hash || shortHash(commit.id)}.`);
+      queryClient.invalidateQueries({ queryKey: ['log'] });
+      queryClient.invalidateQueries({ queryKey: ['replies'] });
+      queryClient.invalidateQueries({ queryKey: ['user-commits'] });
+      queryClient.invalidateQueries({ queryKey: ['commit', commit.id] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (error) => toast(error instanceof ApiError ? error.firstError() : 'fatal: could not restore the commit.', 4_000),
+  });
+
   const remove = useMutation({
     mutationFn: (commit: Commit) => api.deleteCommit(commit.id),
     onSuccess: (_result, commit) => {
-      toast(`rm ${commit.short_hash || shortHash(commit.id)} → /dev/null`);
+      toast(`rm ${commit.short_hash || shortHash(commit.id)} → /dev/null`, 27_000, { label: 'Undo', run: () => restore.mutate(commit) });
       removeCommit(queryClient, commit.id);
       queryClient.invalidateQueries({ queryKey: ['log'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },
     onError: failed,
+  });
+
+  // A translation is kept on every cached copy of the commit and shown in place of the body until Show original.
+  const translate = useMutation({
+    mutationFn: async (commit: Commit) => api.translateCommit(commit.id, await translationLanguage(queryClient)),
+    onMutate: (commit) => toast(`Translating ${commit.short_hash || shortHash(commit.id)}…`, 6_000),
+    onSuccess: (translation, commit) => {
+      if (!translation || !translation.available) {
+        toast(translation?.source_name ? `Already in ${translation.source_name}.` : 'Nothing to translate yet. Try again in a moment.');
+
+        return;
+      }
+
+      if (!translation.translated) {
+        toast('The translation is on its way. Try again in a moment.');
+
+        return;
+      }
+
+      patchCommit(queryClient, commit.id, (c) => ({ ...c, translation, translated: true }));
+    },
+    onError: (error) => toast(error instanceof ApiError ? error.firstError() : 'Could not translate this commit. Try again.', 4_000),
   });
 
   const vote = useMutation({
@@ -144,6 +182,9 @@ export function useCommitHandlers(): CommitHandlers {
       onQuote: (commit) => router.push({ pathname: '/compose', params: { quote: commit.id } }),
       onOpenAuthor: (user) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }),
       onReport: (commit) => reportCommit(commit),
+      onTranslate: (commit) => translate.mutate(commit),
+      onShowOriginal: (commit) => patchCommit(queryClient, commit.id, (c) => ({ ...c, translated: false })),
+      onOpenOrg: (handle) => router.push({ pathname: '/orgs/[handle]', params: { handle } }),
       onPastel: (commit) => {
         tap();
 

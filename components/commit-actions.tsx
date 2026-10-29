@@ -23,6 +23,11 @@ export type CommitHandlers = {
   /** Feed only: toggles the reply thread in place. */
   onToggleReplies?: (commit: Commit) => void;
   onReport?: (commit: Commit) => void;
+  /** Asks the server for the commit in the reader's language and shows it in place. */
+  onTranslate?: (commit: Commit) => void;
+  onShowOriginal?: (commit: Commit) => void;
+  /** An @mention of a GitHub organization opens its page, not a profile. */
+  onOpenOrg?: (handle: string) => void;
   onPastel?: (commit: Commit) => void;
   onVote?: (commit: Commit, optionId: string) => void;
   /** Pastéis left today, or null when the mode is off. */
@@ -105,9 +110,12 @@ export function CommitActions({
     const togglePin = () => handlers.onPin?.(commit);
     const canCard = isApproved && Boolean(handlers.onCard);
     const card = () => handlers.onCard?.(commit);
+    // Translating needs a body; a commit already showing its translation offers the original instead.
+    const canTranslate = isApproved && commit.body.trim() !== '' && Boolean(handlers.onTranslate) && !(commit.translated && commit.translation?.translated);
+    const translate = () => handlers.onTranslate?.(commit);
 
     if (Platform.OS === 'ios') {
-      const options = ['Share link', ...(canCard ? ['Share as image'] : []), ...(canPin ? [pinLabel] : []), ...(canReport ? ['Report commit'] : []), ...(isOwn ? ['Delete'] : []), 'Cancel'];
+      const options = ['Share link', ...(canCard ? ['Share as image'] : []), ...(canTranslate ? ['Translate'] : []), ...(canPin ? [pinLabel] : []), ...(canReport ? ['Report commit'] : []), ...(isOwn ? ['Delete'] : []), 'Cancel'];
 
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: options.length - 1, destructiveButtonIndex: isOwn ? options.length - 2 : undefined }, (index) => {
         const picked = options[index];
@@ -116,6 +124,8 @@ export function CommitActions({
           share();
         } else if (picked === 'Share as image') {
           card();
+        } else if (picked === 'Translate') {
+          translate();
         } else if (picked === pinLabel) {
           togglePin();
         } else if (picked === 'Report commit') {
@@ -131,6 +141,7 @@ export function CommitActions({
     setMenu([
       { label: 'Share link', run: share },
       ...(canCard ? [{ label: 'Share as image', run: card }] : []),
+      ...(canTranslate ? [{ label: 'Translate', run: translate }] : []),
       ...(canPin ? [{ label: pinLabel, run: togglePin }] : []),
       ...(canReport ? [{ label: 'Report commit', run: report }] : []),
       ...(isOwn ? [{ label: 'Delete', run: remove, destructive: true }] : []),

@@ -1,4 +1,4 @@
-import { CornerUpLeft } from 'lucide-react-native';
+import { CornerUpLeft, Pin, PinOff } from 'lucide-react-native';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,8 +17,11 @@ export function MessageActions({
   reactions,
   canReact,
   canReply,
+  canPin = false,
+  pinned = false,
   onReact,
   onReply,
+  onPin,
   onClose,
 }: {
   message: Message | null;
@@ -26,8 +29,12 @@ export function MessageActions({
   reactions: string[];
   canReact: boolean;
   canReply: boolean;
+  /** Orgs only, and only for maintainers: keeps the message at the top of the thread. */
+  canPin?: boolean;
+  pinned?: boolean;
   onReact: (message: Message, emoji: string) => void;
   onReply: (message: Message) => void;
+  onPin?: (message: Message, pinned: boolean) => void;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -76,7 +83,20 @@ export function MessageActions({
                 </Pressable>
               )}
 
-              {!canReact && !canReply && <Text variant="small" muted style={styles.gist}>Nothing to do with this message until the conversation opens.</Text>}
+              {canPin && onPin && (
+                <Pressable
+                  onPress={() => {
+                    onPin(message, !pinned);
+                    onClose();
+                  }}
+                  style={({ pressed }) => [styles.action, { backgroundColor: pressed ? theme.wash : 'transparent' }]}
+                  accessibilityRole="button">
+                  {pinned ? <PinOff size={18} color={theme.ink} strokeWidth={2} /> : <Pin size={18} color={theme.ink} strokeWidth={2} />}
+                  <Text>{pinned ? 'Unpin' : 'Pin to the top'}</Text>
+                </Pressable>
+              )}
+
+              {!canReact && !canReply && !canPin && <Text variant="small" muted style={styles.gist}>Nothing to do with this message until the conversation opens.</Text>}
             </>
           )}
         </Pressable>

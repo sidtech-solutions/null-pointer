@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Avatar } from '@/components/avatar';
 import { FollowButton } from '@/components/follow-button';
 import { Text } from '@/components/text';
+import { WhoToFollow } from '@/components/who-to-follow';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import type { Commit } from '@/lib/types';
 
@@ -11,6 +12,9 @@ export function FollowingEmpty({ suggestions, onTrending, onOpenAuthor }: { sugg
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.suggestions}>
+        <WhoToFollow />
+      </View>
       <Text variant="mono" muted style={styles.center}>fatal: your log does not have any commits yet</Text>
       {suggestions.length === 0 ? (
         <Text style={styles.center}>
@@ -44,7 +48,8 @@ export function FollowingEmpty({ suggestions, onTrending, onOpenAuthor }: { sugg
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingVertical: 64, paddingHorizontal: Space.gutterWide, gap: 12 },
+  wrap: { alignItems: 'center', paddingBottom: 64, paddingHorizontal: Space.gutterWide, gap: 12 },
+  suggestions: { alignSelf: 'stretch', marginHorizontal: -Space.gutterWide, marginBottom: 40 },
   center: { textAlign: 'center', maxWidth: 320 },
   list: { width: '100%', marginTop: 8, borderWidth: 1, borderRadius: Radius.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },

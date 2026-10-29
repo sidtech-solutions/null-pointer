@@ -12,6 +12,7 @@ import { OutboxBanner } from '@/components/outbox-banner';
 import { RefreshFailed } from '@/components/refresh-failed';
 import { RootRow } from '@/components/root-row';
 import { SkeletonRow } from '@/components/skeleton-row';
+import { WhoToFollow } from '@/components/who-to-follow';
 import { useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, nextCursor, Unauthenticated } from '@/lib/client';
@@ -195,6 +196,7 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
           <View>
             <OutboxBanner />
             {refreshFailed ? <RefreshFailed onRetry={() => query.refetch()} /> : null}
+            {log === 'following' && commits.length > 0 ? <WhoToFollow /> : null}
           </View>
         }
         ListEmptyComponent={

@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Users } from 'lucide-react-native';
+import { BellOff, Check, CheckCheck, Pin, Users } from 'lucide-react-native';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -6,7 +6,7 @@ import { Avatar } from '@/components/avatar';
 import { RelativeTime } from '@/components/relative-time';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
-import { conversationTitle, isMine, previewText } from '@/lib/remotes';
+import { conversationTitle, isMine, isMuted, previewText } from '@/lib/remotes';
 import type { ConversationSummary, User } from '@/lib/types';
 
 /** An org's avatar: its two first members, or a group mark when it has no one else in it. */
@@ -56,6 +56,8 @@ export const ConversationRow = memo(function ConversationRow({
   const mineLast = last !== null && !last.event && isMine(last, me);
   const pulled = mineLast && conversation.partner_read_through_id >= (last?.id ?? 0);
   const lane = conversation.partner ? laneColor(theme, conversation.partner.lane) : theme.rail;
+  const pinned = Boolean(conversation.pinned_at);
+  const muted = isMuted(conversation.muted_until_at);
 
   return (
     <Pressable
@@ -65,7 +67,7 @@ export const ConversationRow = memo(function ConversationRow({
       android_ripple={{ color: theme.wash }}
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.wash : theme.surface, borderBottomColor: theme.hairline }]}
       accessibilityRole="button"
-      accessibilityLabel={`${unread ? `${conversation.ahead} ahead. ` : ''}${title}. ${preview}`}>
+      accessibilityLabel={`${unread ? `${conversation.ahead} ahead. ` : ''}${pinned ? 'Pinned. ' : ''}${muted ? 'Muted. ' : ''}${title}. ${preview}`}>
       <View style={styles.avatar}>
         {conversation.kind === 'org' || !conversation.partner ? <OrgAvatar members={conversation.members} me={me} /> : <Avatar user={conversation.partner} size={44} lane={lane} />}
       </View>
@@ -76,6 +78,8 @@ export const ConversationRow = memo(function ConversationRow({
           {conversation.partner && (
             <Text variant="mono" muted numberOfLines={1} style={[styles.handle, styles.tiny]}>@{conversation.partner.handle}</Text>
           )}
+          {pinned && <Pin size={12} color={theme.inkMuted} strokeWidth={2} />}
+          {muted && <BellOff size={12} color={theme.inkMuted} strokeWidth={2} />}
           <RelativeTime iso={conversation.last_message_at} style={styles.tiny} />
         </View>
 
@@ -83,7 +87,7 @@ export const ConversationRow = memo(function ConversationRow({
           {mineLast && (pulled ? <CheckCheck size={14} color={theme.primary} strokeWidth={2} /> : <Check size={14} color={theme.inkMuted} strokeWidth={2} />)}
           <Text variant="small" muted={!unread} numberOfLines={1} style={styles.preview}>{preview}</Text>
           {unread && (
-            <View style={[styles.ahead, { backgroundColor: theme.primary }]} accessibilityLabel={`${conversation.ahead} unread`}>
+            <View style={[styles.ahead, { backgroundColor: muted ? theme.rail : theme.primary }]} accessibilityLabel={`${conversation.ahead} unread`}>
               <Text variant="mono" color={theme.primaryInk} style={styles.aheadText}>{conversation.ahead > 99 ? '99+' : conversation.ahead}</Text>
             </View>
           )}

@@ -9,6 +9,7 @@ import { CodeSuggestion, LanguageSheet, useCodePaste } from '@/components/code-t
 import { CommitRow } from '@/components/commit-row';
 import { DraftPreview } from '@/components/draft-preview';
 import { AttachmentStrip, BodyCounter, chooseImageSource, StashLabel, ToolbarButton, toUploads, useAttachments } from '@/components/composer';
+import { IssueSuggestion } from '@/components/issue-suggestion';
 import { MentionSuggestions } from '@/components/mention-suggestions';
 import { MaxImages } from '@/lib/images';
 import { EmptyState } from '@/components/empty-state';
@@ -21,13 +22,13 @@ import { api, ApiError, nextCursor, Unauthenticated } from '@/lib/client';
 import { findCachedCommit, patchCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
-import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
+import { insertIssue, insertMention, issueReferenceBeforeCaret, mentionBeforeCaret, useIssueSuggestion, useMentionSuggestions } from '@/lib/mentions';
 import { isOnline } from '@/lib/network';
 import { enqueue, isOffline } from '@/lib/outbox';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { threadRows } from '@/lib/timeline';
 import { toast } from '@/lib/toast';
-import type { Commit, Page, User } from '@/lib/types';
+import type { Commit, IssueSuggestion as Issue, Page, User } from '@/lib/types';
 import { useCommitHandlers } from '@/lib/use-commit-handlers';
 
 export default function CommitScreen() {
@@ -50,6 +51,8 @@ export default function CommitScreen() {
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const mention = mentionBeforeCaret(reply, caret);
   const suggestions = useMentionSuggestions(mention, { reply: id });
+  const issueToken = mention ? null : issueReferenceBeforeCaret(reply, caret);
+  const issue = useIssueSuggestion(issueToken);
 
   useEffect(() => {
     if (selection) {
@@ -65,6 +68,17 @@ export default function CommitScreen() {
     }
 
     const next = insertMention(reply, mention, user.handle);
+    setReply(next.text);
+    setCaret(next.caret);
+    setSelection({ start: next.caret, end: next.caret });
+  };
+
+  const pickIssue = (picked: Issue) => {
+    if (!issueToken) {
+      return;
+    }
+
+    const next = insertIssue(reply, issueToken, picked.number);
     setReply(next.text);
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
@@ -91,6 +105,15 @@ export default function CommitScreen() {
     queryFn: ({ pageParam }) => api.replies(id, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => nextCursor(last),
+  });
+
+  // Commits near this one in meaning, under the thread as the web lists them; asked for once the thread is here.
+  const related = useQuery({
+    queryKey: ['related', id],
+    queryFn: () => api.relatedCommits(id),
+    enabled: thread.isSuccess,
+    staleTime: 10 * 60_000,
+    retry: false,
   });
 
   useEffect(() => {
@@ -276,12 +299,24 @@ export default function CommitScreen() {
             <Text variant="small" muted>No replies yet.</Text>
           </View>
         )}
+
+        {related.data && related.data.length > 0 && (
+          <View style={[styles.related, { borderTopColor: theme.hairline }]}>
+            <View style={styles.relatedHeading}>
+              <Text variant="mono" muted style={styles.relatedTitle}>related commits</Text>
+            </View>
+            {related.data.map((candidate, index) => (
+              <CommitRow key={candidate.id} commit={candidate} continuesNext={false} previousLane={index === 0 ? undefined : laneColor(theme, related.data[index - 1].author?.lane)} muted viewerId={account.user?.id} handlers={handlers} />
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {commit && (
         <View style={[styles.replyBar, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
           {!previewing && <CodeSuggestion paste={paste} />}
           <MentionSuggestions users={suggestions} onPick={pickMention} />
+          {!previewing && <IssueSuggestion issue={issue} onPick={pickIssue} />}
           {error && <Text variant="mono" color={theme.destructive} style={styles.error}>{error}</Text>}
           {!previewing && <AttachmentStrip attachments={attachments} compact />}
           {previewing && (
@@ -347,6 +382,9 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 64, alignItems: 'center' },
   loadingReplies: { paddingLeft: Space.rail, paddingVertical: 16 },
   noReplies: { paddingLeft: Space.rail, paddingRight: Space.gutter, paddingVertical: 16 },
+  related: { marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth },
+  relatedHeading: { paddingLeft: Space.rail, paddingRight: Space.gutter, paddingTop: 16, paddingBottom: 4 },
+  relatedTitle: { fontSize: 12, lineHeight: 16 },
   replyBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: Space.gutter, paddingTop: 8, gap: 8 },
   replyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
   replyPreview: { maxHeight: 280 },

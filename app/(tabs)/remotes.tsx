@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useIsFocused, useRouter } from 'expo-router';
 import { MessageSquarePlus, Search, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
 import { Button } from '@/components/button';
@@ -15,10 +15,11 @@ import { Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
 import { refetchFromTop } from '@/lib/query-client';
-import { conversationTitle, summaryKey, targetOf, targetParam } from '@/lib/remotes';
-import { bumpRemotesUnread, removeFromInbox, setRemotesUnread } from '@/lib/remotes-cache';
+import { conversationTitle, isMuted, MuteChoices, summaryKey, targetOf, targetParam } from '@/lib/remotes';
+import { bumpRemotesUnread, patchInbox, removeFromInbox, setRemotesUnread } from '@/lib/remotes-cache';
+import { showOptions } from '@/lib/options';
 import { toast } from '@/lib/toast';
-import type { ConversationSummary, InboxTab } from '@/lib/types';
+import type { ConversationSummary, InboxTab, MuteDuration } from '@/lib/types';
 
 const InboxPoll = 15_000;
 
@@ -179,6 +180,31 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
 
   const open = (conversation: ConversationSummary) => router.push({ pathname: '/remotes/[target]', params: { target: targetParam(targetOf(conversation)) } });
 
+  const pin = useMutation({
+    mutationFn: ({ conversation, pinned }: { conversation: ConversationSummary; pinned: boolean }) => api.pinRemote(targetOf(conversation), pinned),
+    onSuccess: (pinnedAt, { conversation }) => {
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, pinned_at: pinnedAt }));
+      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+    },
+    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not pin.'),
+  });
+
+  const mute = useMutation({
+    mutationFn: ({ conversation, duration }: { conversation: ConversationSummary; duration: MuteDuration }) => api.muteRemote(targetOf(conversation), duration),
+    onSuccess: (mutedUntil, { conversation, duration }) => {
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, muted_until_at: duration === 'off' ? null : (mutedUntil ?? '9999-12-31T00:00:00Z') }));
+      toast(duration === 'off' ? `${conversationTitle(conversation, account.user)} is loud again.` : `Muted ${conversationTitle(conversation, account.user)}.`);
+    },
+    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not mute.'),
+  });
+
+  const chooseMute = (conversation: ConversationSummary) =>
+    showOptions(
+      `Mute ${conversationTitle(conversation, account.user)}`,
+      MuteChoices.map((choice) => ({ label: choice.label, run: () => mute.mutate({ conversation, duration: choice.duration }) })),
+      'No badge and no push until then.',
+    );
+
   const actions = (conversation: ConversationSummary) => {
     const title = conversationTitle(conversation, account.user);
     const options: { label: string; destructive?: boolean; run: () => void }[] = [];
@@ -187,6 +213,8 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
       options.push({ label: 'Merge request', run: () => settle.mutate({ conversation, merge: true }) });
       options.push({ label: 'Drop request', destructive: true, run: () => settle.mutate({ conversation, merge: false }) });
     } else {
+      options.push({ label: conversation.pinned_at ? 'Unpin' : 'Pin to the top', run: () => pin.mutate({ conversation, pinned: !conversation.pinned_at }) });
+      options.push(isMuted(conversation.muted_until_at) ? { label: 'Unmute', run: () => mute.mutate({ conversation, duration: 'off' }) } : { label: 'Mute…', run: () => chooseMute(conversation) });
       options.push({ label: conversation.is_archived ? 'Unstash' : 'Stash', run: () => stash.mutate({ conversation, stashed: !conversation.is_archived }) });
     }
 
@@ -195,16 +223,7 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
       options.push({ label: 'View profile', run: () => router.push({ pathname: '/users/[username]', params: { username } }) });
     }
 
-    if (Platform.OS === 'ios') {
-      const labels = [...options.map((option) => option.label), 'Cancel'];
-      const destructive = options.findIndex((option) => option.destructive);
-
-      ActionSheetIOS.showActionSheetWithOptions({ title, options: labels, cancelButtonIndex: labels.length - 1, destructiveButtonIndex: destructive >= 0 ? destructive : undefined }, (index) => options[index]?.run());
-
-      return;
-    }
-
-    Alert.alert(title, undefined, [...options.map((option) => ({ text: option.label, style: option.destructive ? ('destructive' as const) : undefined, onPress: option.run })), { text: 'Cancel', style: 'cancel' }]);
+    showOptions(title, options);
   };
 
   const refresh = async () => {

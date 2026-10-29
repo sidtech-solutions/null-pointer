@@ -308,6 +308,22 @@ export default function SettingsScreen() {
         )}
 
         <Section>
+          <SettingsHeading title="Language and time" description="The language commits are translated into, and the time zone your profile can show." />
+          <Pressable onPress={() => router.push('/settings/language')} style={[styles.link, { borderColor: theme.hairline, backgroundColor: theme.surface }]} accessibilityRole="button">
+            <Text variant="nav">Translation and time zone</Text>
+            <ChevronRight size={18} color={theme.inkMuted} strokeWidth={2} />
+          </Pressable>
+        </Section>
+
+        <Section>
+          <SettingsHeading title="Scheduled commits" description="Commits waiting for their moment, and what became of the ones that went." />
+          <Pressable onPress={() => router.push('/scheduled')} style={[styles.link, { borderColor: theme.hairline, backgroundColor: theme.surface }]} accessibilityRole="button">
+            <Text variant="nav">Scheduled commits</Text>
+            <ChevronRight size={18} color={theme.inkMuted} strokeWidth={2} />
+          </Pressable>
+        </Section>
+
+        <Section>
           <SettingsHeading title="Safety" description="The people you mute and block." />
           <Pressable onPress={() => router.push('/settings/safety')} style={[styles.link, { borderColor: theme.hairline, backgroundColor: theme.surface }]} accessibilityRole="button">
             <Text variant="nav">Muted and blocked</Text>
@@ -322,7 +338,10 @@ export default function SettingsScreen() {
             <Field label="key" value={fingerprint} />
             <Field label="remote" value={baseUrl()} last />
           </View>
-          <Button title="Manage devices on dev-null.sh" variant="outline" onPress={() => openLink(`${baseUrl()}/settings/devices`)} />
+          <Pressable onPress={() => router.push('/settings/devices')} style={[styles.link, { borderColor: theme.hairline, backgroundColor: theme.surface }]} accessibilityRole="button">
+            <Text variant="nav">All approved devices</Text>
+            <ChevronRight size={18} color={theme.inkMuted} strokeWidth={2} />
+          </Pressable>
           <Button title="Sign out" variant="outline" onPress={signOut} />
           <Text variant="small" muted style={styles.hint}>Deletes the key from this phone and signs you out.</Text>
         </Section>

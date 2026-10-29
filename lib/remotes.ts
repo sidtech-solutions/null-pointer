@@ -88,10 +88,35 @@ export function eventText(message: Message, me: User | null | undefined): string
       return `${actor} made ${subject} a contributor`;
     case 'inherited':
       return `${actor} inherited maintainer`;
+    case 'ping':
+      if (isMine(message, me)) {
+        return 'you sent a ping';
+      }
+
+      // Direct threads leave the author out: there, it can only be the partner.
+      return message.user ? `${actor} sent a ping` : 'you got a ping';
     default:
       return message.body;
   }
 }
+
+/** Whether a conversation is quiet right now: muted until a moment still ahead, or for good. */
+export function isMuted(mutedUntil: string | null | undefined, now: number = Date.now()): boolean {
+  if (!mutedUntil) {
+    return false;
+  }
+
+  const until = Date.parse(mutedUntil);
+
+  return Number.isNaN(until) || until > now;
+}
+
+export const MuteChoices: { duration: 'hour' | 'tomorrow' | 'week' | 'forever'; label: string }[] = [
+  { duration: 'hour', label: 'For an hour' },
+  { duration: 'tomorrow', label: 'Until tomorrow' },
+  { duration: 'week', label: 'For a week' },
+  { duration: 'forever', label: 'Until I turn it back on' },
+];
 
 /** One line for a message without showing it: its text, or what it carried instead. */
 export function messageGist(message: Pick<Message, 'body' | 'images'> & { images_count?: number; has_voice?: boolean }): string {

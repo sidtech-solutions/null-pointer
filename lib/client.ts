@@ -2,7 +2,7 @@ import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Candidate, Commit, CommitHit, CommitPreview, CommitThread, Connection, CurrentUser, InboxPage, InboxTab, LinkPreview, Message, MessageReaction, NewPoll, Notification, Page, Profile, ReactionUsage, RemotesFrom, Thread, User } from './types';
+import type { Candidate, Commit, CommitPreview, CommitThread, CommitTranslation, Connection, CurrentUser, Device, InboxPage, InboxTab, IssueSuggestion, LinkPreview, Message, MessageReaction, MuteDuration, NewPoll, Notification, Organization, OrgRole, Page, Profile, ReactionUsage, RemotesFrom, ScheduledCommit, SuggestedUser, Thread, User, UserSettings } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -231,11 +231,13 @@ export const api = {
       reaction_changes: Array.isArray(data.reaction_changes) ? data.reaction_changes : [],
       read_through_id: Number(data.read_through_id ?? 0),
       is_archived: data.is_archived === true,
+      pinned_at: typeof data.pinned_at === 'string' ? data.pinned_at : null,
+      muted_until_at: typeof data.muted_until_at === 'string' ? data.muted_until_at : null,
       access: typeof data.access === 'string' ? data.access : 'open',
     };
 
     if (target.kind === 'org') {
-      return { ...base, kind: 'org', org: data.org ?? { id: target.id, name: null }, members: Array.isArray(data.members) ? data.members : [], typing: Array.isArray(data.typing) ? data.typing : [], role: data.role ?? null };
+      return { ...base, kind: 'org', org: data.org ?? { id: target.id, name: null }, members: Array.isArray(data.members) ? data.members : [], typing: Array.isArray(data.typing) ? data.typing : [], role: data.role ?? null, pinned: Array.isArray(data.pinned) ? data.pinned : null };
     }
 
     return { ...base, kind: 'direct', partner: data.partner, partner_read_through_id: Number(data.partner_read_through_id ?? 0), partner_read_at: data.partner_read_at ?? null, partner_typing: data.partner_typing === true };
@@ -300,67 +302,36 @@ export const api = {
     return Array.isArray(json.reactions) ? json.reactions : [];
   },
 
-  /**
-   * People to mention, as the web's composer suggests them: with no term, the
-   * people the user follows; replies and quotes put the thread's people first.
-   * The route is new on devnull; an older server answers 404.
-   */
-  /**
-   * People by name or handle, from the web's public search: the signed API has
-   * none yet. Unsigned, so mutes and blocks are not applied.
-   */
-  async searchUsers(term: string): Promise<User[]> {
+  /** People by name or handle, as the web's search finds them, with whether each follows the user and is followed. Mutes and blocks apply. */
+  async searchUsers(term: string): Promise<SuggestedUser[]> {
     const query = term.trim().slice(0, 100);
 
     if (query === '') {
       return [];
     }
 
-    let response: Response;
+    const json = await send('GET', 'search/users', { q: query });
 
-    try {
-      response = await fetch(`${baseUrl()}/search/users?q=${encode(query)}`, { headers: { Accept: 'application/json' } });
-    } catch {
-      throw ApiError.couldNotConnect(baseUrl());
-    }
-
-    if (!response.ok) {
-      throw await ApiError.fromResponse(response);
-    }
-
-    const users = (await response.json())?.users;
-
-    return Array.isArray(users) ? users.filter((user): user is User => user && typeof user.handle === 'string') : [];
+    return Array.isArray(json.data) ? json.data.filter((user: SuggestedUser) => user && typeof user.handle === 'string') : [];
   },
 
-  /**
-   * Commits by meaning, from the web's public search, which the signed API lacks. Three characters at least, 15
-   * searches a minute, and unsigned, so mutes and blocks are not applied.
-   */
-  async searchCommits(term: string, limit = 20): Promise<CommitHit[]> {
+  /** Commits by meaning: three characters at least, up to 100 answers, 15 searches a minute. Full commits, as the log sends them. */
+  async searchCommits(term: string, limit = 20): Promise<Commit[]> {
     const query = term.trim().slice(0, 100);
 
     if (Array.from(query).length < 3) {
       return [];
     }
 
-    let response: Response;
+    const json = await send('GET', 'search/commits', { q: query, limit: String(limit) });
 
-    try {
-      response = await fetch(`${baseUrl()}/search/commits?q=${encode(query)}&limit=${limit}`, { headers: { Accept: 'application/json' } });
-    } catch {
-      throw ApiError.couldNotConnect(baseUrl());
-    }
-
-    if (!response.ok) {
-      throw await ApiError.fromResponse(response);
-    }
-
-    const commits = (await response.json())?.commits;
-
-    return Array.isArray(commits) ? commits.filter((commit): commit is CommitHit => commit && typeof commit.id === 'string' && typeof commit.body === 'string') : [];
+    return Array.isArray(json.data) ? json.data : [];
   },
 
+  /**
+   * People to mention, as the web's composer suggests them: with no term, the
+   * people the user follows; replies and quotes put the thread's people first.
+   */
   async mentionSuggestions(term: string, context: { reply?: string | null; quote?: string | null } = {}): Promise<User[]> {
     const json = await send('GET', 'search/mentions', { q: term, reply: context.reply ?? null, quote: context.quote ?? null });
 
@@ -567,5 +538,176 @@ export const api = {
 
   async unstar(id: string): Promise<Commit> {
     return (await send('DELETE', `commits/${encode(id)}/star`)).data;
+  },
+  /**
+   * Who to follow: the day's picks, a few per round, each with how many people the user follows follow them.
+   * Beside a profile or a commit, that developer's people or the thread's come first.
+   */
+  async suggestedUsers(round = 0, context: { handle?: string | null; commitId?: string | null } = {}): Promise<SuggestedUser[]> {
+    const json = await send('GET', 'me/suggested-users', { round: String(round), handle: context.handle ?? null, commit_id: context.commitId ?? null });
+
+    return Array.isArray(json.data) ? json.data : [];
+  },
+
+  /** Not interested: the person is never suggested again. */
+  async dismissSuggestion(username: string): Promise<void> {
+    await send('POST', `users/${encode(username)}/dismiss`);
+  },
+
+  /** Undoes deleting one of the user's commits within the 30 s window; answers with the commit as it was. */
+  async restoreCommit(id: string): Promise<Commit> {
+    return (await send('POST', `commits/${encode(id)}/restoration`)).data;
+  },
+
+  /** Commits near this one in meaning, as the web lists under a thread. */
+  async relatedCommits(id: string): Promise<Commit[]> {
+    const json = await send('GET', `commits/${encode(id)}/related`);
+
+    return Array.isArray(json.data) ? json.data : [];
+  },
+
+  /** Translates a commit into a language; the server keeps the translation, so asking again is free. 503 while the provider is down. */
+  async translateCommit(id: string, language: string): Promise<CommitTranslation | null> {
+    const json = await send('POST', `commits/${encode(id)}/translation`, {}, { language });
+
+    return json.translation ?? null;
+  },
+
+  async settings(): Promise<UserSettings> {
+    const data = (await send('GET', 'me/settings')).data ?? {};
+
+    return {
+      timezone: typeof data.timezone === 'string' ? data.timezone : null,
+      show_local_time: data.show_local_time === true,
+      translation_language: typeof data.translation_language === 'string' ? data.translation_language : null,
+      automatic_translation: data.automatic_translation !== false,
+      translation_languages: Array.isArray(data.translation_languages) ? data.translation_languages : [],
+      is_admin: data.is_admin === true,
+    };
+  },
+
+  /** timezone: an IANA name, or null to forget it; showLocalTime: whether the profile shows the user's local time. */
+  async saveTimezone(timezone: string | null, showLocalTime: boolean): Promise<void> {
+    await send('PUT', 'me/timezone', {}, { timezone, show_local_time: showLocalTime });
+  },
+
+  async setAutomaticTranslation(enabled: boolean): Promise<void> {
+    await send('PUT', 'me/automatic-translation', {}, { enabled });
+  },
+
+  /** language: a code from settings, or null to follow the phone's language. */
+  async setTranslationLanguage(language: string | null): Promise<void> {
+    await send('PUT', 'me/translation-language', {}, { translation_language: language });
+  },
+
+  /** The keys approved to sign as the user, newest approval first. */
+  async devices(): Promise<Device[]> {
+    const json = await send('GET', 'me/devices');
+
+    return Array.isArray(json.data) ? json.data : [];
+  },
+
+  /** Revoking the key this phone signs with signs the app out on the server's side. */
+  async revokeDevice(id: string): Promise<void> {
+    await send('DELETE', `me/devices/${encode(id)}`);
+  },
+
+  async organization(handle: string): Promise<Organization> {
+    return (await send('GET', `organizations/${encode(handle)}`)).data;
+  },
+
+  organizationMentions(handle: string, cursor?: string | null): Promise<Page<Commit>> {
+    return send('GET', `organizations/${encode(handle)}/mentions`, { cursor });
+  },
+
+  /** The queue, page by page: waiting commits first by date, then the ones already submitted. */
+  async scheduledCommits(page = 1): Promise<{ data: ScheduledCommit[]; next: number | null }> {
+    const json = await send('GET', 'scheduled-commits', { page: page > 1 ? String(page) : null });
+    const current = Number(json.meta?.current_page ?? page);
+    const last = Number(json.meta?.last_page ?? current);
+
+    return { data: Array.isArray(json.data) ? json.data : [], next: current < last ? current + 1 : null };
+  },
+
+  /**
+   * Queues a top-level commit for a moment up to 30 days away, `scheduledAt` as ISO 8601 with its offset.
+   * Images and a poll go as on a commit; up to 10 can wait at once.
+   */
+  async scheduleCommit(body: string, scheduledAt: string, options: { images?: Upload[]; descriptions?: string[]; poll?: NewPoll | null } = {}): Promise<ScheduledCommit> {
+    const payload: Record<string, unknown> = { body, scheduled_at: scheduledAt };
+
+    if (options.poll) {
+      payload.poll = { options: options.poll.options, duration: options.poll.duration };
+    }
+
+    if (options.images && options.images.length > 0 && options.descriptions?.some((description) => description !== '')) {
+      payload.image_descriptions = options.images.map((_, index) => options.descriptions?.[index] || null);
+    }
+
+    return (await send('POST', 'scheduled-commits', {}, payload, options.images)).data;
+  },
+
+  /** 409 when it was already submitted or canceled. */
+  async cancelScheduledCommit(id: string): Promise<void> {
+    await send('DELETE', `scheduled-commits/${encode(id)}`);
+  },
+
+  /** Submits a waiting commit now instead of at its time. 409 when it already went. */
+  async submitScheduledCommit(id: string): Promise<ScheduledCommit> {
+    return (await send('POST', `scheduled-commits/${encode(id)}/submission`)).data;
+  },
+
+  /** The /dev/null issue with that number, or null when there is none. */
+  async issueSuggestion(number: string): Promise<IssueSuggestion | null> {
+    const json = await send('GET', 'search/issues', { q: number });
+
+    return json.issue && typeof json.issue.number === 'number' ? json.issue : null;
+  },
+
+  /** Maintainers only, up to the org's limit. Answers with every pinned message, newest pin first. */
+  async pinMessage(messageId: number, pinned: boolean): Promise<{ pinned: Message[]; reactions_version: number }> {
+    const json = await send(pinned ? 'PUT' : 'DELETE', `remotes/messages/${encode(String(messageId))}/pin`);
+
+    return { pinned: Array.isArray(json.pinned) ? json.pinned : [], reactions_version: Number(json.reactions_version ?? 0) };
+  },
+
+  /** Keeps a conversation at the top of the inbox, for this user only. Answers with when it was pinned. */
+  async pinRemote(target: RemoteTarget, pinned: boolean): Promise<string | null> {
+    const json = await send('PUT', `${remotePath(target)}/pin`, {}, { pinned });
+
+    return typeof json.pinned_at === 'string' ? json.pinned_at : null;
+  },
+
+  /** Quiets a conversation's badge and pushes for a while; `off` ends it. Answers with when the mute ends, null for never or none. */
+  async muteRemote(target: RemoteTarget, duration: MuteDuration): Promise<string | null> {
+    const json = await send('PUT', `${remotePath(target)}/mute`, {}, { duration });
+
+    return typeof json.muted_until_at === 'string' ? json.muted_until_at : null;
+  },
+
+  /** A nudge with nothing to say: an event in the thread, and a push for the others. */
+  async pingRemote(target: RemoteTarget): Promise<Message> {
+    const json = await send('POST', `${remotePath(target)}/ping`);
+
+    return json.data ?? json;
+  },
+
+  /** Maintainers only. With the history, the new people see everything; without it, only what comes after. */
+  async addOrgMembers(org: string, members: string[], shareHistory: boolean): Promise<void> {
+    await send('POST', `remotes/orgs/${encode(org)}/members`, {}, { members, share_history: shareHistory });
+  },
+
+  async setOrgRole(org: string, username: string, role: OrgRole): Promise<void> {
+    await send('PUT', `remotes/orgs/${encode(org)}/members/${encode(username)}`, {}, { role });
+  },
+
+  /** Maintainers remove anyone; anyone removes themself, which is leaving. */
+  async removeOrgMember(org: string, username: string): Promise<void> {
+    await send('DELETE', `remotes/orgs/${encode(org)}/members/${encode(username)}`);
+  },
+
+  /** Maintainers only; an empty name clears it, and the org goes by its people again. */
+  async renameOrg(org: string, name: string): Promise<void> {
+    await send('PUT', `remotes/orgs/${encode(org)}`, {}, { name: name.trim() === '' ? null : name.trim() });
   },
 };

@@ -7,6 +7,7 @@ import { CommitBody, isFolded } from '@/components/commit-body';
 import { CommitPoll } from '@/components/commit-poll';
 import { CommitMedia } from '@/components/commit-media';
 import { GraphRail } from '@/components/graph-rail';
+import { LiveBadge } from '@/components/live-badge';
 import { RelativeTime } from '@/components/relative-time';
 import { Text } from '@/components/text';
 import { laneColor, Space, useTheme } from '@/constants/theme';
@@ -68,8 +69,13 @@ export const CommitRow = memo(function CommitRow({
   const metaStyle = muted ? styles.tiny : undefined;
   const folded = !focused && !unfolded && isFolded(commit);
   const laterParts = commit.series_position && commit.series_size ? Math.max(0, commit.series_size - commit.series_position) : 0;
-  const openMention = handlers.onOpenAuthor ? (username: string) => handlers.onOpenAuthor?.({ handle: username } as Commit['author']) : undefined;
+  // The server says which @mentions name an organization; those open its page, the rest a profile.
+  const orgMentions = commit.mentions?.filter((mention) => mention.kind === 'organization').map((mention) => mention.handle.toLowerCase()) ?? [];
+  const openMention = handlers.onOpenAuthor ? (username: string) => (orgMentions.includes(username.toLowerCase()) && handlers.onOpenOrg ? handlers.onOpenOrg(username) : handlers.onOpenAuthor?.({ handle: username } as Commit['author'])) : undefined;
   const isOwn = viewerId !== undefined && String(commit.author?.id) === String(viewerId);
+  // A translation showing takes the body's place; its source and a way back sit under it.
+  const translation = commit.translated && commit.translation?.translated ? commit.translation : null;
+  const segments = translation ? (folded && translation.translated?.preview_segments ? translation.translated.preview_segments : translation.translated?.body_segments) : folded && commit.preview_segments ? commit.preview_segments : commit.body_segments;
   const canVote = viewerId !== undefined && !isOwn && (commit.status === 'approved' || commit.status === '');
 
   // The header and body open the commit; the action row below them is a sibling, not a child, of that press area.
@@ -82,6 +88,7 @@ export const CommitRow = memo(function CommitRow({
               {commit.author.name || commit.author.handle}
             </Text>
             <Text variant="mono" muted numberOfLines={1} style={[styles.shrink, metaStyle]}>@{commit.author.handle}</Text>
+            {commit.author.live && <LiveBadge stream={commit.author.live} />}
             <Text variant="mono" muted style={metaStyle}>·</Text>
             <RelativeTime iso={commit.created_at} style={metaStyle} />
             {commit.series_position && commit.series_size ? (
@@ -111,7 +118,16 @@ export const CommitRow = memo(function CommitRow({
             </Pressable>
           )}
 
-          <CommitBody body={commit.body} segments={folded && commit.preview_segments ? commit.preview_segments : commit.body_segments} size={focused ? 17 : muted ? 14 : 15} muted={muted} numberOfLines={folded && !commit.preview_segments ? 8 : undefined} onOpenMention={openMention} onOpenLink={openLink} />
+          <CommitBody body={commit.body} segments={segments} size={focused ? 17 : muted ? 14 : 15} muted={muted} numberOfLines={folded && !commit.preview_segments ? 8 : undefined} onOpenMention={openMention} onOpenLink={openLink} />
+          {translation && (
+            <View style={styles.translated}>
+              <Text variant="mono" muted numberOfLines={1} style={[styles.tiny, styles.shrink]}>Translated from {translation.source_name ?? translation.source_language ?? 'another language'}</Text>
+              <Text variant="mono" muted style={styles.tiny}>·</Text>
+              <Pressable onPress={() => handlers.onShowOriginal?.(commit)} hitSlop={8} accessibilityRole="button">
+                <Text variant="mono" color={theme.primary} style={styles.tiny}>Show original</Text>
+              </Pressable>
+            </View>
+          )}
           {folded && (
             <Pressable onPress={() => setUnfolded(true)} hitSlop={10} style={styles.showMore} accessibilityRole="button">
               <Text variant="small" color={theme.primary} style={styles.tiny13}>Show more</Text>
@@ -175,6 +191,7 @@ const styles = StyleSheet.create({
   series: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999 },
   seriesMore: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, minHeight: 28 },
   showMore: { alignSelf: 'flex-start', paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
+  translated: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 24 },
   tiny13: { fontSize: 13, lineHeight: 18 },
   hash: { marginTop: 4 },
 });

@@ -2,7 +2,10 @@ import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
 import type { Commit, CommitThread, Page, Profile } from './types';
 
-// Patches every cached copy of a commit: logs, reply previews, commit pages, threads.
+const pagedQueries = { predicate: (query: { queryKey: readonly unknown[] }) => ['log', 'replies', 'user-commits', 'organization-mentions'].includes(String(query.queryKey[0])) };
+const listQueries = { predicate: (query: { queryKey: readonly unknown[] }) => ['commit-search', 'related'].includes(String(query.queryKey[0])) };
+
+// Patches every cached copy of a commit: logs, reply previews, commit pages, threads, search answers, related lists.
 export function patchCommit(queryClient: QueryClient, id: string, change: (commit: Commit) => Commit): void {
   const patch = (commit: Commit): Commit => {
     const patched = commit.id === id ? change(commit) : commit;
@@ -16,9 +19,9 @@ export function patchCommit(queryClient: QueryClient, id: string, change: (commi
     };
   };
 
-  queryClient.setQueriesData<InfiniteData<Page<Commit>>>({ predicate: (query) => query.queryKey[0] === 'log' || query.queryKey[0] === 'replies' || query.queryKey[0] === 'user-commits' }, (data) =>
-    data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map(patch) })) } : data,
-  );
+  queryClient.setQueriesData<InfiniteData<Page<Commit>>>(pagedQueries, (data) => (data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.map(patch) })) } : data));
+
+  queryClient.setQueriesData<Commit[]>(listQueries, (list) => (Array.isArray(list) ? list.map(patch) : list));
 
   queryClient.setQueriesData<Page<Commit>>({ queryKey: ['thread'] }, (page) => (page ? { ...page, data: page.data.map(patch) } : page));
 
@@ -30,9 +33,8 @@ export function patchCommit(queryClient: QueryClient, id: string, change: (commi
 }
 
 export function removeCommit(queryClient: QueryClient, id: string): void {
-  queryClient.setQueriesData<InfiniteData<Page<Commit>>>({ predicate: (query) => query.queryKey[0] === 'log' || query.queryKey[0] === 'replies' || query.queryKey[0] === 'user-commits' }, (data) =>
-    data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.filter((commit) => commit.id !== id) })) } : data,
-  );
+  queryClient.setQueriesData<InfiniteData<Page<Commit>>>(pagedQueries, (data) => (data ? { ...data, pages: data.pages.map((page) => ({ ...page, data: page.data.filter((commit) => commit.id !== id) })) } : data));
+  queryClient.setQueriesData<Commit[]>(listQueries, (list) => (Array.isArray(list) ? list.filter((commit) => commit.id !== id) : list));
   queryClient.setQueriesData<Page<Commit>>({ queryKey: ['thread'] }, (page) => (page ? { ...page, data: page.data.filter((commit) => commit.id !== id) } : page));
 }
 

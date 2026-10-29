@@ -1,9 +1,9 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Ellipsis, ImagePlus, Mic, SendHorizontal, X } from 'lucide-react-native';
+import { ChevronLeft, Ellipsis, ImagePlus, Mic, MoreHorizontal, Pin, SendHorizontal, UserPlus, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
@@ -26,10 +26,11 @@ import { MaxImages } from '@/lib/images';
 import { useKeyboardShown } from '@/lib/keyboard';
 import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
 import { useNow } from '@/lib/now';
-import { accessNotice, isMine, orgTitle, quickReactions, targetFromParam, targetKey, typingText } from '@/lib/remotes';
-import { bumpRemotesUnread, removeFromInbox } from '@/lib/remotes-cache';
+import { accessNotice, isMine, isMuted, messageGist, MuteChoices, orgTitle, quickReactions, targetFromParam, targetKey, typingText } from '@/lib/remotes';
+import { bumpRemotesUnread, patchInbox, removeFromInbox } from '@/lib/remotes-cache';
+import { showOptions } from '@/lib/options';
 import { toast } from '@/lib/toast';
-import { type Message, MessageMaxLength, type MessageReply, type OrgMember, type User } from '@/lib/types';
+import { type Message, MessageMaxLength, type MessageReply, type MuteDuration, OrgLimits, type OrgMember, type OrgRole, type User } from '@/lib/types';
 import { useVoiceNote } from '@/lib/use-voice-note';
 import { type PendingMessage, useThread } from '@/lib/use-thread';
 
@@ -83,6 +84,8 @@ export default function ThreadScreen() {
   const [replyTo, setReplyTo] = useState<MessageReply | null>(null);
   const [acting, setActing] = useState<Message | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState(0);
   const [caret, setCaret] = useState(0);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -106,6 +109,10 @@ export default function ThreadScreen() {
 
   const partner = data?.kind === 'direct' ? data.partner : null;
   const members = useMemo<OrgMember[]>(() => (data?.kind === 'org' ? data.members : []), [data]);
+  const role = data?.kind === 'org' ? data.role : null;
+  const maintains = role === 'maintainer';
+  const pinnedMessages = useMemo(() => (data?.kind === 'org' ? (data.pinned ?? []) : []), [data]);
+  const pinnedIds = useMemo(() => new Set(pinnedMessages.map((message) => message.id)), [pinnedMessages]);
   const access = data?.access ?? 'open';
   const open = access === 'open';
   const archived = data?.is_archived ?? false;
@@ -258,6 +265,122 @@ export default function ThreadScreen() {
     onError: (error) => failed(error, 'fatal: could not block.'),
   });
 
+  const openAuthor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }), [router]);
+
+  const pingThem = useMutation({
+    mutationFn: () => api.pingRemote(target),
+    onSuccess: (message) => {
+      thread.absorbMessage(message);
+      tap();
+      requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
+    },
+    onError: (error) => failed(error, 'fatal: could not ping.'),
+  });
+
+  const pinConversation = useMutation({
+    mutationFn: (pinned: boolean) => api.pinRemote(target, pinned),
+    onSuccess: (pinnedAt) => {
+      thread.patch((current) => ({ ...current, pinned_at: pinnedAt }));
+      patchInbox(queryClient, key, (row) => ({ ...row, pinned_at: pinnedAt }));
+      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+      toast(pinnedAt ? `Pinned ${title} to the top of your inbox.` : `Unpinned ${title}.`);
+    },
+    onError: (error) => failed(error, 'fatal: could not pin.'),
+  });
+
+  const mute = useMutation({
+    mutationFn: (duration: MuteDuration) => api.muteRemote(target, duration),
+    onSuccess: (mutedUntil, duration) => {
+      const until = duration === 'off' ? null : (mutedUntil ?? '9999-12-31T00:00:00Z');
+      thread.patch((current) => ({ ...current, muted_until_at: until }));
+      patchInbox(queryClient, key, (row) => ({ ...row, muted_until_at: until }));
+      toast(duration === 'off' ? `${title} is loud again.` : `Muted ${title}.`);
+    },
+    onError: (error) => failed(error, 'fatal: could not mute.'),
+  });
+
+  const chooseMute = () =>
+    showOptions(
+      `Mute ${title}`,
+      MuteChoices.map((choice) => ({ label: choice.label, run: () => mute.mutate(choice.duration) })),
+      'No badge and no push until then.',
+    );
+
+  const rename = useMutation({
+    mutationFn: (name: string) => api.renameOrg(target.kind === 'org' ? target.id : '', name),
+    onSuccess: (_result, name) => {
+      const next = name.trim() === '' ? null : name.trim();
+      thread.patch((current) => (current.kind === 'org' ? { ...current, org: { ...current.org, name: next } } : current));
+      patchInbox(queryClient, key, (row) => ({ ...row, name: next }));
+      setRenaming(null);
+    },
+    onError: (error) => failed(error, 'fatal: could not rename the org.'),
+  });
+
+  const setRole = useMutation({
+    mutationFn: ({ member, next }: { member: OrgMember; next: OrgRole }) => api.setOrgRole(target.kind === 'org' ? target.id : '', member.user.handle, next),
+    onSuccess: (_result, { member, next }) => {
+      thread.patch((current) => (current.kind === 'org' ? { ...current, members: current.members.map((candidate) => (String(candidate.user.id) === String(member.user.id) ? { ...candidate, role: next } : candidate)) } : current));
+      toast(next === 'maintainer' ? `@${member.user.handle} is a maintainer now.` : `@${member.user.handle} is a contributor now.`);
+    },
+    onError: (error) => failed(error, 'fatal: could not change the role.'),
+  });
+
+  const removeMember = useMutation({
+    mutationFn: (member: OrgMember) => api.removeOrgMember(target.kind === 'org' ? target.id : '', member.user.handle),
+    onSuccess: (_result, member) => {
+      if (String(member.user.id) === String(me?.id)) {
+        removeFromInbox(queryClient, key);
+        queryClient.invalidateQueries({ queryKey: ['remotes'] });
+        setMembersOpen(false);
+        router.back();
+
+        return;
+      }
+
+      thread.patch((current) => (current.kind === 'org' ? { ...current, members: current.members.filter((candidate) => String(candidate.user.id) !== String(member.user.id)) } : current));
+    },
+    onError: (error) => failed(error, 'fatal: could not remove them.'),
+  });
+
+  const pinMessage = useMutation({
+    mutationFn: ({ message, pinned }: { message: Message; pinned: boolean }) => api.pinMessage(message.id, pinned),
+    onSuccess: ({ pinned, reactions_version }, variables) => {
+      thread.patch((current) => (current.kind === 'org' ? { ...current, pinned, reactions_version: Math.max(current.reactions_version, reactions_version) } : current));
+      setPinnedIndex(0);
+      toast(variables.pinned ? 'Pinned to the top of the org.' : 'Unpinned.');
+    },
+    onError: (error) => failed(error, 'fatal: could not pin the message.'),
+  });
+
+  const leave = () =>
+    Alert.alert('Leave this org?', maintains && members.filter((member) => member.role === 'maintainer').length === 1 ? 'You are its only maintainer; the longest-standing member takes over. An org nobody is left in is deleted.' : 'You stop seeing its messages. A maintainer can add you back.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Leave', style: 'destructive', onPress: () => removeMember.mutate(members.find((member) => String(member.user.id) === String(me?.id)) ?? { user: me!, role }) },
+    ]);
+
+  const manageMember = (member: OrgMember) => {
+    const mine = String(member.user.id) === String(me?.id);
+    const options: { label: string; destructive?: boolean; run: () => void }[] = [{ label: 'View profile', run: () => { setMembersOpen(false); openAuthor(member.user); } }];
+
+    if (mine) {
+      options.push({ label: 'Leave org', destructive: true, run: leave });
+    } else if (maintains) {
+      options.push(member.role === 'maintainer' ? { label: 'Make contributor', run: () => setRole.mutate({ member, next: 'contributor' }) } : { label: 'Make maintainer', run: () => setRole.mutate({ member, next: 'maintainer' }) });
+      options.push({
+        label: 'Remove from org',
+        destructive: true,
+        run: () =>
+          Alert.alert(`Remove @${member.user.handle}?`, 'They stop seeing the org. A maintainer can add them back.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Remove', style: 'destructive', onPress: () => removeMember.mutate(member) },
+          ]),
+      });
+    }
+
+    showOptions(member.user.name || `@${member.user.handle}`, options, `@${member.user.handle}${member.role ? ` · ${member.role}` : ''}`);
+  };
+
   const more = () => {
     const options: { label: string; destructive?: boolean; run: () => void }[] = [];
 
@@ -265,10 +388,25 @@ export default function ThreadScreen() {
       options.push({ label: 'View profile', run: () => router.push({ pathname: '/users/[username]', params: { username: partner.handle } }) });
     } else if (data?.kind === 'org') {
       options.push({ label: 'Members', run: () => setMembersOpen(true) });
+
+      if (maintains) {
+        options.push({ label: 'Add people', run: () => router.push({ pathname: '/remotes/new', params: { org: target.kind === 'org' ? target.id : '' } }) });
+        options.push({ label: 'Rename org', run: () => setRenaming(data.org.name ?? '') });
+      }
+    }
+
+    if (data && open && latestId > 0) {
+      options.push({ label: 'Ping', run: () => pingThem.mutate() });
     }
 
     if (data && latestId > 0) {
+      options.push({ label: data.pinned_at ? 'Unpin from the top' : 'Pin to the top', run: () => pinConversation.mutate(!data.pinned_at) });
+      options.push(isMuted(data.muted_until_at) ? { label: 'Unmute', run: () => mute.mutate('off') } : { label: 'Mute…', run: chooseMute });
       options.push({ label: archived ? 'Unstash' : 'Stash', run: () => stash.mutate() });
+    }
+
+    if (data?.kind === 'org') {
+      options.push({ label: 'Leave org', destructive: true, run: leave });
     }
 
     if (partner) {
@@ -283,20 +421,7 @@ export default function ThreadScreen() {
       });
     }
 
-    if (options.length === 0) {
-      return;
-    }
-
-    if (Platform.OS === 'ios') {
-      const labels = [...options.map((option) => option.label), 'Cancel'];
-      const destructive = options.findIndex((option) => option.destructive);
-
-      ActionSheetIOS.showActionSheetWithOptions({ options: labels, cancelButtonIndex: labels.length - 1, destructiveButtonIndex: destructive >= 0 ? destructive : undefined }, (index) => options[index]?.run());
-
-      return;
-    }
-
-    Alert.alert(title, undefined, [...options.map((option) => ({ text: option.label, style: option.destructive ? ('destructive' as const) : undefined, onPress: option.run })), { text: 'Cancel', style: 'cancel' }]);
+    showOptions(title, options, subtitle || undefined);
   };
 
   const canSend = open && !attachments.picking && !recording && (draft !== null || body.trim() !== '' || attachments.images.length > 0) && body.length <= MessageMaxLength;
@@ -339,7 +464,6 @@ export default function ThreadScreen() {
     }
   };
 
-  const openAuthor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }), [router]);
 
   const scrollToMessage = useCallback(
     (id: number) => {
@@ -427,6 +551,27 @@ export default function ThreadScreen() {
           </Pressable>
         }
       />
+
+      {pinnedMessages.length > 0 && (
+        <Pressable
+          onPress={() => {
+            const shown = pinnedMessages[pinnedIndex % pinnedMessages.length];
+            scrollToMessage(shown.id);
+            setPinnedIndex((current) => (current + 1) % pinnedMessages.length);
+          }}
+          style={[styles.pinned, { backgroundColor: theme.wash, borderBottomColor: theme.hairline }]}
+          accessibilityRole="button"
+          accessibilityLabel={`${pinnedMessages.length} pinned ${pinnedMessages.length === 1 ? 'message' : 'messages'}. Shows the next one`}>
+          <Pin size={14} color={theme.primary} strokeWidth={2} />
+          <View style={styles.pinnedBody}>
+            <Text variant="mono" color={theme.primary} style={styles.dayText}>
+              pinned{pinnedMessages.length > 1 ? ` ${(pinnedIndex % pinnedMessages.length) + 1}/${pinnedMessages.length}` : ''}
+              {pinnedMessages[pinnedIndex % pinnedMessages.length]?.user ? ` · @${pinnedMessages[pinnedIndex % pinnedMessages.length].user!.handle}` : ''}
+            </Text>
+            <Text variant="small" numberOfLines={1}>{messageGist(pinnedMessages[pinnedIndex % pinnedMessages.length]) || 'Message'}</Text>
+          </View>
+        </Pressable>
+      )}
 
       <FlashList
         ref={list}
@@ -530,15 +675,34 @@ export default function ThreadScreen() {
         reactions={quickReactions(usage.data ?? [])}
         canReact={open && acting?.event == null}
         canReply={open}
+        canPin={data?.kind === 'org' && maintains && acting?.event == null}
+        pinned={acting ? pinnedIds.has(acting.id) : false}
         onReact={toggleReaction}
         onReply={replyToMessage}
+        onPin={(message, pinned) => pinMessage.mutate({ message, pinned })}
         onClose={() => setActing(null)}
       />
 
       <Modal visible={membersOpen} transparent animationType="fade" onRequestClose={() => setMembersOpen(false)} statusBarTranslucent>
         <Pressable onPress={() => setMembersOpen(false)} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
           <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <Text variant="section" style={styles.sheetTitle}>{title}</Text>
+            <View style={styles.sheetHead}>
+              <Text variant="section" numberOfLines={1} style={[styles.sheetTitle, styles.titles]}>{title}</Text>
+              {maintains && members.length < OrgLimits.maxMembers && (
+                <Pressable
+                  onPress={() => {
+                    setMembersOpen(false);
+                    router.push({ pathname: '/remotes/new', params: { org: target.kind === 'org' ? target.id : '' } });
+                  }}
+                  hitSlop={8}
+                  style={[styles.addPeople, { backgroundColor: theme.primarySoft }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add people">
+                  <UserPlus size={16} color={theme.primary} strokeWidth={2} />
+                  <Text variant="small" color={theme.primary}>Add people</Text>
+                </Pressable>
+              )}
+            </View>
             <ScrollView style={styles.members}>
               {members.map((member) => (
                 <Pressable
@@ -547,11 +711,12 @@ export default function ThreadScreen() {
                     setMembersOpen(false);
                     openAuthor(member.user);
                   }}
+                  onLongPress={() => manageMember(member)}
                   style={({ pressed }) => [styles.member, { backgroundColor: pressed ? theme.wash : 'transparent' }]}
                   accessibilityRole="button">
                   <Avatar user={member.user} size={36} />
                   <View style={styles.memberNames}>
-                    <Text variant="name" numberOfLines={1}>{member.user.name || member.user.handle}</Text>
+                    <Text variant="name" numberOfLines={1}>{member.user.name || member.user.handle}{String(member.user.id) === String(me?.id) ? ' (you)' : ''}</Text>
                     <Text variant="mono" muted numberOfLines={1} style={styles.subtitle}>@{member.user.handle}</Text>
                   </View>
                   {member.role === 'maintainer' && (
@@ -559,9 +724,37 @@ export default function ThreadScreen() {
                       <Text variant="mono" muted style={styles.subtitle}>maintainer</Text>
                     </View>
                   )}
+                  {(maintains || String(member.user.id) === String(me?.id)) && (
+                    <Pressable onPress={() => manageMember(member)} hitSlop={8} style={styles.memberMore} accessibilityRole="button" accessibilityLabel={`Options for @${member.user.handle}`}>
+                      <MoreHorizontal size={18} color={theme.inkMuted} strokeWidth={2} />
+                    </Pressable>
+                  )}
                 </Pressable>
               ))}
             </ScrollView>
+            {maintains && <Text variant="small" muted style={styles.sheetHint}>Hold a person, or tap their dots, to change their role or remove them.</Text>}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={renaming !== null} transparent animationType="fade" onRequestClose={() => setRenaming(null)} statusBarTranslucent>
+        <Pressable onPress={() => setRenaming(null)} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
+          <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+            <Text variant="section" style={styles.sheetTitle}>Rename org</Text>
+            <TextInput
+              value={renaming ?? ''}
+              onChangeText={setRenaming}
+              placeholder="Org name (empty goes by its people)"
+              placeholderTextColor={theme.inkMuted}
+              maxLength={OrgLimits.maxNameLength}
+              autoFocus
+              style={[styles.input, styles.renameInput, { color: theme.ink, backgroundColor: theme.wash }]}
+              accessibilityLabel="Org name"
+            />
+            <View style={styles.renameActions}>
+              <Button title="Cancel" variant="outline" onPress={() => setRenaming(null)} />
+              <Button title="Save" busy={rename.isPending} disabled={(renaming ?? '').length > OrgLimits.maxNameLength} onPress={() => rename.mutate(renaming ?? '')} style={styles.titles} />
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -597,8 +790,16 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: { maxHeight: '70%', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 16, paddingHorizontal: Space.gutter },
   sheetTitle: { marginBottom: 8 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sheetHint: { paddingTop: 8, paddingHorizontal: 4 },
+  addPeople: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 10, borderRadius: Radius.full, marginBottom: 8 },
   members: { flexGrow: 0 },
   member: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingHorizontal: 4, borderRadius: Radius.md },
   memberNames: { flex: 1 },
+  memberMore: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   role: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm },
+  pinned: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: Space.gutter, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  pinnedBody: { flex: 1 },
+  renameInput: { marginBottom: 12 },
+  renameActions: { flexDirection: 'row', gap: 8 },
 });

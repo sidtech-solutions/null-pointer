@@ -1,5 +1,8 @@
 export type Lane = number | string | null;
 
+/** The stream a user is on right now, as the server found it on their profile; gone once it ends. */
+export type LiveStream = { platform: 'youtube' | 'twitch' | string; url: string; thumbnail_url: string; ends_at: string };
+
 export type User = {
   id: string | number;
   handle: string;
@@ -13,10 +16,36 @@ export type User = {
   github_url?: string | null;
   html_url?: string | null;
   created_at?: string | null;
+  live?: LiveStream | null;
   followers_count?: number;
   following_count?: number;
   commits_count?: number;
 };
+
+/** Someone the server suggests following: a user with why, and whether they already follow the reader. */
+export type SuggestedUser = User & { is_followed?: boolean; follows_you?: boolean; followed_by_following_count?: number };
+
+/** An organization on GitHub that commits mention, as `organizations/{handle}` describes it. */
+export type Organization = { handle: string; name: string | null; avatar_url: string | null; bio: string | null; location: string | null; website: string | null; github_url: string; html_url: string };
+
+/** A key approved to sign as the user, as the web's Devices page lists them. */
+export type Device = { id: string; name: string; fingerprint: string; approved_at: string; last_used_at: string | null };
+
+export type TranslationLanguage = { code: string; name: string; native_name: string };
+
+/** What the web's settings show only the user: time zone, translation, and whether they are an admin. */
+export type UserSettings = { timezone: string | null; show_local_time: boolean; translation_language: string | null; automatic_translation: boolean; translation_languages: TranslationLanguage[]; is_admin: boolean };
+
+/** A commit in another language, as `POST commits/{id}/translation` answers: null segments while the translation is still being made. */
+export type CommitTranslation = { language: string; source_language: string | null; source_name: string | null; available: boolean; translated: { body_segments?: BodySegment[] | null; preview_segments?: BodySegment[] | null } | null };
+
+/** A /dev/null GitHub issue the composer can reference by number. */
+export type IssueSuggestion = { number: number; title: string; url: string };
+
+export type ScheduledStatus = 'scheduled' | 'pending' | 'approved' | 'rejected' | 'deleted';
+
+/** A commit waiting in the user's queue, or one already submitted and what became of it. */
+export type ScheduledCommit = { id: string; body: string | null; body_segments?: BodySegment[] | null; preview_segments?: BodySegment[] | null; poll_options: string[] | null; image_count: number; scheduled_at: string; submitted_at: string | null; status: ScheduledStatus };
 
 export type ReplyPreview = {
   data: Commit[];
@@ -35,7 +64,7 @@ export type CommitPreview = { body: string; body_segments?: BodySegment[] | null
 
 export type BodySegment = { type: 'text'; text: string } | { type: 'code'; code: string } | { type: 'block'; language?: string | null; /** The code highlighted by the server, as tempest/highlight HTML. */ html?: string; code?: string };
 
-export type Mention = { handle: string; offset?: number; length?: number };
+export type Mention = { handle: string; offset?: number; length?: number; kind?: 'user' | 'organization' };
 
 export type PollOption = { id: string; label: string; votes_count?: number | null; voted?: boolean; percentage?: number | null };
 
@@ -69,6 +98,9 @@ export type Commit = {
   series_size?: number | null;
   poll?: Poll | null;
   pasteis_count?: number;
+  /** App only: the translation fetched for this commit, and whether it is the one showing. */
+  translation?: CommitTranslation | null;
+  translated?: boolean;
 };
 
 export type Page<T> = {
@@ -178,7 +210,10 @@ export type PushAccess = 'open' | 'request' | 'waiting' | 'restricted' | 'closed
 
 export type OrgRole = 'maintainer' | 'contributor';
 
-export type OrgEvent = 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'promoted' | 'demoted' | 'inherited';
+export type OrgEvent = 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'promoted' | 'demoted' | 'inherited' | 'ping';
+
+/** How long a conversation stays quiet; `off` ends a mute. */
+export type MuteDuration = 'hour' | 'tomorrow' | 'week' | 'forever' | 'off';
 
 export type MessageReaction = { user_id: string; emoji: string };
 
@@ -192,6 +227,7 @@ export type MessageVoice = { id: string; duration_ms: number; waveform: number[]
 
 export type Message = {
   id: number;
+  pinned_at?: string | null;
   user_id: string;
   client_id: string;
   body: string;
@@ -227,17 +263,20 @@ export type ConversationSummary = {
   partner_read_through_id: number;
   partner_read_at: string | null;
   is_archived: boolean;
+  pinned_at?: string | null;
+  muted_until_at?: string | null;
 };
 
 export type InboxPage = { data: ConversationSummary[]; has_more: boolean; unread_count: number; requests_count: number };
 
 export type ReactionChange = { id: number; reactions: MessageReaction[] };
 
-type ThreadBase = { messages: Message[]; has_older: boolean; reactions_version: number; reaction_changes: ReactionChange[]; read_through_id: number; is_archived: boolean; access: PushAccess };
+type ThreadBase = { messages: Message[]; has_older: boolean; reactions_version: number; reaction_changes: ReactionChange[]; read_through_id: number; is_archived: boolean; pinned_at: string | null; muted_until_at: string | null; access: PushAccess };
 
 export type DirectThread = ThreadBase & { kind: 'direct'; partner: User; partner_read_through_id: number; partner_read_at: string | null; partner_typing: boolean };
 
-export type OrgThread = ThreadBase & { kind: 'org'; org: OrgRef; members: OrgMember[]; typing: string[]; role: OrgRole | null };
+/** `pinned` is the org's pinned messages, newest pin first; null in a poll that found them unchanged. */
+export type OrgThread = ThreadBase & { kind: 'org'; org: OrgRef; members: OrgMember[]; typing: string[]; role: OrgRole | null; pinned: Message[] | null };
 
 export type Thread = DirectThread | OrgThread;
 

@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Building2, CalendarDays, Ellipsis, Link as LinkIcon, MapPin, MessageSquare, Pin, Star, Terminal } from 'lucide-react-native';
+import { Building2, CalendarDays, Clock, Ellipsis, Link as LinkIcon, MapPin, MessageSquare, Pin, Radio, Star, Terminal } from 'lucide-react-native';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ActionSheetIOS, Alert, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
@@ -12,6 +12,7 @@ import { CommitRow } from '@/components/commit-row';
 import { EmptyState } from '@/components/empty-state';
 import { Feed, type FeedItem, feedItems } from '@/components/feed';
 import { FollowButton } from '@/components/follow-button';
+import { LiveBadge, platformName } from '@/components/live-badge';
 import { RootRow } from '@/components/root-row';
 import { SkeletonRow } from '@/components/skeleton-row';
 import { Text } from '@/components/text';
@@ -33,7 +34,7 @@ const Tabs: { key: Tab; label: string }[] = [
 
 const Months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-export function ProfileView({ username, onOpenConnections, onOpenStarred, footer }: { username: string; onOpenConnections: (type: 'followers' | 'following') => void; onOpenStarred?: () => void; footer?: ReactNode }) {
+export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpenScheduled, footer }: { username: string; onOpenConnections: (type: 'followers' | 'following') => void; onOpenStarred?: () => void; onOpenScheduled?: () => void; footer?: ReactNode }) {
   const theme = useTheme();
   const router = useRouter();
   const account = useAccount();
@@ -131,6 +132,11 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
             </View>
             {isMe ? (
               <View style={styles.actions}>
+                {onOpenScheduled && (
+                  <Pressable onPress={onOpenScheduled} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Scheduled commits">
+                    <Clock size={16} color={theme.ink} strokeWidth={2} />
+                  </Pressable>
+                )}
                 {onOpenStarred && (
                   <Pressable onPress={onOpenStarred} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Starred commits">
                     <Star size={16} color={theme.ink} strokeWidth={2} />
@@ -158,6 +164,7 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
             <View style={styles.handle}>
               <View style={[styles.dot, { backgroundColor: lane }]} />
               <Text variant="mono" muted numberOfLines={1} style={styles.shrink}>@{user.handle}</Text>
+              {user.live && <LiveBadge stream={user.live} size="md" />}
               {profile.data?.follows_you && (
                 <View style={[styles.chip, { backgroundColor: theme.wash }]}>
                   <Text variant="small" muted style={styles.chipText}>Follows you</Text>
@@ -181,6 +188,7 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, footer
           {user.bio ? <Text>{user.bio}</Text> : null}
 
           <View style={styles.facts}>
+            {user.live ? <Fact icon={<Radio size={14} color={theme.inkMuted} strokeWidth={2} />} label={`Live now on ${platformName(user.live.platform)}`} onPress={() => openLink(user.live!.url)} /> : null}
             {user.company ? <Fact icon={<Building2 size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.company} /> : null}
             {user.location ? <Fact icon={<MapPin size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.location} /> : null}
             {user.website ? <Fact icon={<LinkIcon size={14} color={theme.inkMuted} strokeWidth={2} />} label={user.website.replace(/^https?:\/\//, '')} onPress={() => openLink(websiteUrl(user.website!))} /> : null}

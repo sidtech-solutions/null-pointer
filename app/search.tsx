@@ -6,35 +6,38 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { CommitRow } from '@/components/commit-row';
 import { EmptyState } from '@/components/empty-state';
+import { FollowButton } from '@/components/follow-button';
 import { Header } from '@/components/header';
+import { LiveBadge } from '@/components/live-badge';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
+import { useAccount } from '@/lib/account';
 import { api } from '@/lib/client';
-import { relativeTime } from '@/lib/display';
-import { useNow } from '@/lib/now';
-import type { CommitHit, User } from '@/lib/types';
+import type { Commit, SuggestedUser, User } from '@/lib/types';
+import { useCommitHandlers } from '@/lib/use-commit-handlers';
 
 const FewCommits = 5;
 const AllCommits = 100;
 
 type Row =
   | { type: 'heading'; key: string; label: string }
-  | { type: 'user'; key: string; user: User }
-  | { type: 'commit'; key: string; commit: CommitHit }
+  | { type: 'user'; key: string; user: SuggestedUser }
+  | { type: 'commit'; key: string; commit: Commit }
   | { type: 'more'; key: string }
   | { type: 'note'; key: string; text: string };
 
 /**
- * Find a developer by name or handle, or commits by meaning, through the
- * web's public search, since the signed API has neither. Like the web's
- * dialog: people first, then the most relevant commits, with a way to see
- * them all.
+ * Find a developer by name or handle, or commits by meaning, as the web's
+ * dialog does: people first, then the most relevant commits, with a way to see
+ * them all. Signed, so mutes and blocks apply.
  */
 export default function SearchScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const now = useNow();
+  const account = useAccount();
+  const handlers = useCommitHandlers();
   const [text, setText] = useState('');
   const [term, setTerm] = useState('');
   const [all, setAll] = useState(false);
@@ -92,7 +95,6 @@ export default function SearchScreen() {
   }, [people.data, commits.data, commits.isError, commits.error, longEnough, term, all]);
 
   const openUser = (user: Pick<User, 'handle'>) => router.push({ pathname: '/users/[username]', params: { username: user.handle } });
-  const openCommit = (commit: CommitHit) => router.push({ pathname: '/commits/[id]', params: { id: commit.id } });
   const searching = term !== '' && (people.isPending || (longEnough && commits.isPending));
   const nothing = term !== '' && !searching && rows.length === 0;
 
@@ -149,29 +151,18 @@ export default function SearchScreen() {
                 <Pressable onPress={() => openUser(item.user)} style={[styles.row, { borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`@${item.user.handle}`}>
                   <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
                   <View style={styles.column}>
-                    <Text variant="name" numberOfLines={1}>{item.user.name || item.user.handle}</Text>
-                    <Text variant="mono" muted numberOfLines={1}>@{item.user.handle}</Text>
+                    <View style={styles.meta}>
+                      <Text variant="name" numberOfLines={1} style={styles.shrink}>{item.user.name || item.user.handle}</Text>
+                      {item.user.live && <LiveBadge stream={item.user.live} />}
+                    </View>
+                    <Text variant="mono" muted numberOfLines={1}>@{item.user.handle}{item.user.follows_you ? ' · follows you' : ''}</Text>
                     {item.user.bio ? <Text variant="small" numberOfLines={2}>{item.user.bio}</Text> : null}
                   </View>
+                  {String(item.user.id) !== String(account.user?.id) && <FollowButton username={item.user.handle} isFollowing={item.user.is_followed === true} />}
                 </Pressable>
               );
             case 'commit':
-              return (
-                <Pressable onPress={() => openCommit(item.commit)} style={[styles.row, { borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityHint="Opens the commit">
-                  {item.commit.user ? <Avatar user={item.commit.user} size={36} lane={laneColor(theme, item.commit.user.lane)} /> : <View style={styles.avatarGap} />}
-                  <View style={styles.column}>
-                    <View style={styles.meta}>
-                      {item.commit.user && (
-                        <Pressable onPress={() => openUser(item.commit.user!)} hitSlop={6}>
-                          <Text variant="mono" muted numberOfLines={1}>@{item.commit.user.handle}</Text>
-                        </Pressable>
-                      )}
-                      <Text variant="mono" muted>· {relativeTime(item.commit.created_at, now)}</Text>
-                    </View>
-                    <Text numberOfLines={3} style={styles.body}>{item.commit.body}</Text>
-                  </View>
-                </Pressable>
-              );
+              return <CommitRow commit={item.commit} continuesNext={false} viewerId={account.user?.id} handlers={handlers} />;
             case 'more':
               return (
                 <Pressable onPress={() => setAll(true)} style={styles.more} accessibilityRole="button">
@@ -215,11 +206,10 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 12, borderRadius: Radius.lg },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
   heading: { fontSize: 12, lineHeight: 16, paddingHorizontal: Space.gutter, paddingTop: 16, paddingBottom: 6 },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingHorizontal: Space.gutter, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: Space.gutter, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   column: { flex: 1, gap: 2 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  body: { fontSize: 15, lineHeight: 22 },
-  avatarGap: { width: 36 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shrink: { flexShrink: 1 },
   more: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Space.gutter, paddingVertical: 14 },
   note: { paddingHorizontal: Space.gutter, paddingVertical: 12 },
   hint: { paddingVertical: 32, paddingHorizontal: Space.gutterWide, alignItems: 'center' },

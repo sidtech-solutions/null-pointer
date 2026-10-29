@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Camera, ChartBar, Code, Eye, FoldVertical, ImagePlus, Plus, X } from 'lucide-react-native';
+import { Camera, ChartBar, Clock, Code, Eye, FoldVertical, ImagePlus, Plus, X } from 'lucide-react-native';
 import { type ReactNode, useCallback, useState } from 'react';
 import { ActionSheetIOS, Alert, Linking, Platform, Pressable, StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
 
@@ -177,7 +177,7 @@ export function ToolbarButton({ icon: Icon, label, onPress, disabled = false, ac
  * The row under the text: attach from the library, take a photo, add a poll.
  * A poll can't go with images or on a quote, as on the web.
  */
-export function ComposerToolbar({ attachments, poll, onTogglePoll, withPoll = true, previewing = false, onTogglePreview, onPasteCode, children }: { attachments: Attachments; poll?: NewPoll | null; onTogglePoll?: () => void; withPoll?: boolean; previewing?: boolean; onTogglePreview?: () => void; onPasteCode?: () => void; children?: ReactNode }) {
+export function ComposerToolbar({ attachments, poll, onTogglePoll, withPoll = true, previewing = false, onTogglePreview, onPasteCode, onSchedule, scheduled = false, children }: { attachments: Attachments; poll?: NewPoll | null; onTogglePoll?: () => void; withPoll?: boolean; previewing?: boolean; onTogglePreview?: () => void; onPasteCode?: () => void; /** Opens the schedule picker; a top-level commit can wait for a moment up to thirty days away. */ onSchedule?: () => void; scheduled?: boolean; children?: ReactNode }) {
   const full = attachments.images.length >= MaxImages;
   const imagesOff = attachments.picking || full || Boolean(poll) || previewing;
 
@@ -188,6 +188,7 @@ export function ComposerToolbar({ attachments, poll, onTogglePoll, withPoll = tr
       {withPoll && onTogglePoll && <ToolbarButton icon={ChartBar} label={poll ? 'Remove poll' : 'Add a poll'} onPress={onTogglePoll} disabled={attachments.images.length > 0 || previewing} active={Boolean(poll)} />}
       {onPasteCode && <ToolbarButton icon={Code} label="Paste the clipboard as a code block" onPress={onPasteCode} disabled={previewing} />}
       {onTogglePreview && <ToolbarButton icon={Eye} label={previewing ? 'Back to writing' : 'Preview'} onPress={onTogglePreview} active={previewing} />}
+      {onSchedule && <ToolbarButton icon={Clock} label={scheduled ? 'Change when it commits' : 'Schedule for later'} onPress={onSchedule} active={scheduled} disabled={previewing} />}
       <View style={styles.spacer} />
       {children}
     </View>

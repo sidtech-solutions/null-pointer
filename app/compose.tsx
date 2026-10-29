@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
+import { Clock, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,23 +9,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CodeSuggestion, LanguageSheet, useCodePaste } from '@/components/code-tools';
 import { CommitBody } from '@/components/commit-body';
 import { DraftPreview } from '@/components/draft-preview';
+import { IssueSuggestion } from '@/components/issue-suggestion';
 import { MentionSuggestions } from '@/components/mention-suggestions';
+import { SchedulePicker } from '@/components/schedule-picker';
 import { AttachmentStrip, BodyCounter, ComposerInput, ComposerToolbar, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
-import { laneColor, Space, useTheme } from '@/constants/theme';
+import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError } from '@/lib/client';
 import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
 import { useKeyboardShown } from '@/lib/keyboard';
-import { insertMention, mentionBeforeCaret, useMentionSuggestions } from '@/lib/mentions';
+import { insertIssue, insertMention, issueReferenceBeforeCaret, mentionBeforeCaret, useIssueSuggestion, useMentionSuggestions } from '@/lib/mentions';
 import { isOnline } from '@/lib/network';
 import { enqueue, isOffline } from '@/lib/outbox';
+import { scheduledAtOf, scheduleLabel } from '@/lib/schedule';
 import { sharedText, withShared } from '@/lib/share-target';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
 import { refreshStreakWidget } from '@/lib/widgets';
-import type { NewPoll, User } from '@/lib/types';
+import type { IssueSuggestion as Issue, NewPoll, User } from '@/lib/types';
 
 export default function ComposeScreen() {
   const theme = useTheme();
@@ -46,6 +50,11 @@ export default function ComposeScreen() {
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const mention = mentionBeforeCaret(body, caret);
   const suggestions = useMentionSuggestions(mention, { quote });
+  const issueToken = mention ? null : issueReferenceBeforeCaret(body, caret);
+  const issue = useIssueSuggestion(issueToken);
+  // When the commit should go, or null for now. Only a top-level commit waits, as on the web.
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+  const [picking, setPicking] = useState(false);
 
   // The caret is placed once after a pick, then the input is left to itself again.
   useEffect(() => {
@@ -62,6 +71,17 @@ export default function ComposeScreen() {
     }
 
     const next = insertMention(body, mention, user.handle);
+    setBody(next.text);
+    setCaret(next.caret);
+    setSelection({ start: next.caret, end: next.caret });
+  };
+
+  const pickIssue = (picked: Issue) => {
+    if (!issueToken) {
+      return;
+    }
+
+    const next = insertIssue(body, issueToken, picked.number);
     setBody(next.text);
     setCaret(next.caret);
     setSelection({ start: next.caret, end: next.caret });
@@ -158,6 +178,26 @@ export default function ComposeScreen() {
     },
   });
 
+  // A scheduled commit is kept on the server, not here, so it needs a connection now.
+  const schedule = useMutation({
+    mutationFn: async () => {
+      const { uploads, descriptions } = await toUploads(attachments.images);
+
+      return api.scheduleCommit(body.trim(), scheduledAtOf(scheduledAt ?? new Date()), { images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
+    },
+    onSuccess: async (created) => {
+      await dropStash(account.user?.id, stashName);
+      setBody('');
+      attachments.clear();
+      setPoll(null);
+      setScheduledAt(null);
+      queryClient.invalidateQueries({ queryKey: ['scheduled'] });
+      router.back();
+      toast(`Scheduled for ${scheduleLabel(created.scheduled_at)}.`);
+    },
+    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not schedule the commit.'),
+  });
+
   // No connection: the draft goes to the outbox and is pushed when one comes back.
   const keepForLater = async () => {
     const trimmed = body.trim();
@@ -172,7 +212,10 @@ export default function ComposeScreen() {
   };
 
   const submit = () => {
-    if (!isOnline()) {
+    if (scheduledAt) {
+      setError(null);
+      schedule.mutate();
+    } else if (!isOnline()) {
       keepForLater();
     } else {
       commit.mutate();
@@ -181,7 +224,7 @@ export default function ComposeScreen() {
 
   const accent = account.user ? laneColor(theme, account.user.lane) : theme.primary;
   const handle = quoted.data?.commit.author?.handle;
-  const busy = commit.isPending;
+  const busy = commit.isPending || schedule.isPending;
 
   const cancel = () => {
     if (hasImages || poll) {
@@ -210,7 +253,7 @@ export default function ComposeScreen() {
         <Text variant="name" numberOfLines={1} style={styles.title}>{quote ? `Quote @${handle ?? ''}` : 'New commit'}</Text>
         <View style={styles.barButton}>
           <Pressable onPress={submit} disabled={!canCommit || busy} style={[styles.commit, { backgroundColor: accent, opacity: canCommit || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canCommit || busy, busy }}>
-            {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>Commit</Text>}
+            {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>{scheduledAt ? 'Schedule' : 'Commit'}</Text>}
           </Pressable>
         </View>
       </View>
@@ -239,6 +282,18 @@ export default function ComposeScreen() {
           />
         )}
 
+        {scheduledAt && (
+          <View style={[styles.scheduled, { backgroundColor: theme.primarySoft }]}>
+            <Clock size={14} color={theme.primary} strokeWidth={2} />
+            <Pressable onPress={() => setPicking(true)} style={styles.scheduledText} accessibilityRole="button" accessibilityLabel={`Scheduled for ${scheduleLabel(scheduledAt)}. Change`}>
+              <Text variant="small" color={theme.primary} numberOfLines={1}>Commits {scheduleLabel(scheduledAt)}</Text>
+            </Pressable>
+            <Pressable onPress={() => setScheduledAt(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Commit now instead">
+              <X size={16} color={theme.primary} strokeWidth={2} />
+            </Pressable>
+          </View>
+        )}
+
         {!previewing && <AttachmentStrip attachments={attachments} />}
 
         {poll && !previewing && <PollEditor poll={poll} onChange={setPoll} onRemove={() => setPoll(null)} />}
@@ -256,10 +311,12 @@ export default function ComposeScreen() {
 
       {!previewing && <CodeSuggestion paste={paste} />}
       {!previewing && <MentionSuggestions users={suggestions} onPick={pickMention} />}
+      {!previewing && <IssueSuggestion issue={issue} onPick={pickIssue} />}
       <LanguageSheet paste={paste} />
+      <SchedulePicker visible={picking} value={scheduledAt} onPick={setScheduledAt} onClear={() => setScheduledAt(null)} onClose={() => setPicking(false)} />
 
       <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
-        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)} onPasteCode={paste.fromClipboard}>
+        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)} onPasteCode={paste.fromClipboard} onSchedule={quote ? undefined : () => setPicking(true)} scheduled={scheduledAt !== null}>
           {restored && (
             <StashLabel
               onDrop={() => {
@@ -285,6 +342,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   body: { paddingHorizontal: Space.gutterWide - 4, paddingTop: 16, paddingBottom: 24, gap: 16 },
   input: { minHeight: 120 },
+  scheduled: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 36, borderRadius: Radius.lg },
+  scheduledText: { flex: 1 },
   quoted: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
   quotedHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   quotedName: { flexShrink: 1, fontSize: 14 },

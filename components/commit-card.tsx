@@ -1,11 +1,13 @@
 import { Image } from 'expo-image';
+import { Star } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { CommitBody } from '@/components/commit-body';
+
 import { Text } from '@/components/text';
 import { Fonts, laneColor, Radius, useTheme } from '@/constants/theme';
-import { shortHash } from '@/lib/display';
+import { compact, count, shortHash } from '@/lib/display';
 import type { Commit } from '@/lib/types';
 
 const Months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -76,11 +78,14 @@ export function CommitCard({ commit, width }: { commit: Commit; width: number })
         </View>
         <View style={styles.footerRight}>
           {(commit.stars_count > 0 || commit.replies_count > 0) && (
-            <Text variant="mono" muted>
-              {commit.stars_count > 0 ? `★ ${commit.stars_count}` : ''}
-              {commit.stars_count > 0 && commit.replies_count > 0 ? ' · ' : ''}
-              {commit.replies_count > 0 ? `${commit.replies_count} ${commit.replies_count === 1 ? 'reply' : 'replies'}` : ''}
-            </Text>
+            <View style={styles.counts}>
+              {commit.stars_count > 0 && <Star size={12} color={theme.inkMuted} fill={theme.inkMuted} strokeWidth={2} />}
+              <Text variant="mono" muted>
+                {commit.stars_count > 0 ? compact(commit.stars_count) : ''}
+                {commit.stars_count > 0 && commit.replies_count > 0 ? ' · ' : ''}
+                {commit.replies_count > 0 ? count(commit.replies_count, 'reply', 'replies') : ''}
+              </Text>
+            </View>
           )}
           <Text style={[styles.wordmark, { color: theme.ink }]}>
             /dev<Text style={[styles.wordmark, { color: theme.lanes[0] }]}>/</Text>null
@@ -94,7 +99,8 @@ export function CommitCard({ commit, width }: { commit: Commit; width: number })
 const Pad = 24;
 
 const styles = StyleSheet.create({
-  card: { padding: Pad, paddingLeft: Pad + 6, gap: 16, borderWidth: StyleSheet.hairlineWidth, borderRadius: 20, overflow: 'hidden' },
+  card: { padding: Pad, paddingLeft: Pad + 6, gap: 16, borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.xl, borderCurve: 'continuous', overflow: 'hidden' },
+  counts: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 6 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identity: { flex: 1, gap: 2 },

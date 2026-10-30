@@ -128,7 +128,7 @@ export default function SearchScreen() {
             accessibilityLabel="Search developers and commits"
           />
           {text !== '' && (
-            <Pressable onPress={() => setText('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
+            <Pressable onPress={() => setText('')} hitSlop={14} accessibilityRole="button" accessibilityLabel="Clear search">
               <X size={16} color={theme.inkMuted} strokeWidth={2} />
             </Pressable>
           )}
@@ -148,7 +148,7 @@ export default function SearchScreen() {
               );
             case 'user':
               return (
-                <Pressable onPress={() => openUser(item.user)} style={[styles.row, { borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`@${item.user.handle}`}>
+                <Pressable onPress={() => openUser(item.user)} style={({ pressed }) => [styles.row, { borderBottomColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityLabel={`@${item.user.handle}`}>
                   <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
                   <View style={styles.column}>
                     <View style={styles.meta}>
@@ -165,7 +165,7 @@ export default function SearchScreen() {
               return <CommitRow commit={item.commit} continuesNext={false} viewerId={account.user?.id} handlers={handlers} />;
             case 'more':
               return (
-                <Pressable onPress={() => setAll(true)} style={styles.more} accessibilityRole="button">
+                <Pressable onPress={() => setAll(true)} style={({ pressed }) => [styles.more, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
                   <Text variant="small" color={theme.primary}>See all matching commits</Text>
                   <ArrowRight size={14} color={theme.primary} strokeWidth={2} />
                 </Pressable>

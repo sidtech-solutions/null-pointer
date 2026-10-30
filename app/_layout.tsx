@@ -5,7 +5,8 @@ import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { applyThemePreference, useTheme } from '@/constants/theme';
@@ -60,25 +61,22 @@ export default function RootLayout() {
     }
   }, [error]);
 
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
   if (!loaded) {
     return null;
   }
 
+  // Gestures (swipe to reply, the colour sliders, the image viewer) need this root above every screen.
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: SevenDays, buster: CacheBuster }}>
-      <AccountProvider>
-        <ShareIntentProvider>
-          <ShareTarget />
-          <RootLayoutNav />
-        </ShareIntentProvider>
-      </AccountProvider>
-    </PersistQueryClientProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: SevenDays, buster: CacheBuster }}>
+        <AccountProvider>
+          <ShareIntentProvider>
+            <ShareTarget />
+            <RootLayoutNav />
+          </ShareIntentProvider>
+        </AccountProvider>
+      </PersistQueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -108,7 +106,23 @@ function RootLayoutNav() {
   const theme = useTheme();
   const base = theme.dark ? DarkTheme : DefaultTheme;
   const reporting = useReporting();
+  const { status } = useAccount();
+  const signedIn = status === 'signed-in';
 
+  // The splash stays up until the session is known, so neither Login nor Home flashes before the other.
+  useEffect(() => {
+    if (status !== 'loading') {
+      SplashScreen.hideAsync();
+    }
+  }, [status]);
+
+  if (status === 'loading') {
+    return null;
+  }
+
+  // Signed in, the tabs and everything above them exist and onboarding does
+  // not; signed out, the reverse. The router drops the other side's history,
+  // so back can never re-enter a signed-out tab bar or a finished onboarding.
   return (
     <ThemeProvider
       value={{
@@ -117,27 +131,30 @@ function RootLayoutNav() {
       }}>
       <StatusBar style={theme.dark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.shell } }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Protected guard={signedIn} redirectTo="/onboarding">
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="commits/[id]" />
+          <Stack.Screen name="remotes/[target]" />
+          <Stack.Screen name="remotes/new" />
+          <Stack.Screen name="users/[username]/index" />
+          <Stack.Screen name="users/[username]/[type]" />
+          <Stack.Screen name="orgs/[handle]" />
+          <Stack.Screen name="settings/index" />
+          <Stack.Screen name="settings/safety" />
+          <Stack.Screen name="settings/devices" />
+          <Stack.Screen name="settings/language" />
+          <Stack.Screen name="scheduled" />
+          <Stack.Screen name="starred" />
+          <Stack.Screen name="search" />
+          <Stack.Screen name="card/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="outbox" />
+          <Stack.Screen name="image" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        </Stack.Protected>
+        <Stack.Protected guard={!signedIn} redirectTo="/(tabs)">
+          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+        </Stack.Protected>
         <Stack.Screen name="auth/callback" />
-        <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="commits/[id]" />
-        <Stack.Screen name="remotes/[target]" />
-        <Stack.Screen name="remotes/new" />
-        <Stack.Screen name="users/[username]/index" />
-        <Stack.Screen name="users/[username]/[type]" />
-        <Stack.Screen name="orgs/[handle]" />
-        <Stack.Screen name="settings/index" />
-        <Stack.Screen name="settings/safety" />
-        <Stack.Screen name="settings/devices" />
-        <Stack.Screen name="settings/language" />
-        <Stack.Screen name="scheduled" />
-        <Stack.Screen name="starred" />
-        <Stack.Screen name="search" />
-        <Stack.Screen name="card/[id]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="outbox" />
-        <Stack.Screen name="image" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ReportSheet commit={reporting} onClose={() => reportCommit(null)} />
       <OptionsHost />
@@ -145,3 +162,7 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

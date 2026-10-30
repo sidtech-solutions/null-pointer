@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/text';
 import { Space, useTheme } from '@/constants/theme';
-import { count } from '@/lib/display';
+import { compact, count } from '@/lib/display';
 import type { Activity } from '@/lib/types';
 
 const Windows: Record<Activity['scale'], string> = {
@@ -34,7 +34,7 @@ export function ActivityGraph({ activity, lane }: { activity: Activity; lane: st
           <Text variant="small" muted>No commits yet</Text>
         ) : (
           <Text variant="small" muted>
-            <Text variant="monoMedium">{total}</Text> {total === 1 ? 'commit' : 'commits'} {Windows[activity.scale]}
+            <Text variant="monoMedium">{compact(total)}</Text> {total === 1 ? 'commit' : 'commits'} {Windows[activity.scale]}
           </Text>
         )}
       </View>

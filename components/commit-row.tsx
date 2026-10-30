@@ -1,5 +1,6 @@
 import { CornerDownRight, ListOrdered } from 'lucide-react-native';
-import { memo, useState } from 'react';
+import { useRecyclingState } from '@shopify/flash-list';
+import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CommitActions, type CommitHandlers } from '@/components/commit-actions';
@@ -10,7 +11,7 @@ import { GraphRail } from '@/components/graph-rail';
 import { LiveBadge } from '@/components/live-badge';
 import { RelativeTime } from '@/components/relative-time';
 import { Text } from '@/components/text';
-import { laneColor, Space, useTheme } from '@/constants/theme';
+import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { relativeTime, shortHash } from '@/lib/display';
 import { openLink } from '@/lib/links';
 import type { Commit } from '@/lib/types';
@@ -42,7 +43,8 @@ export const CommitRow = memo(function CommitRow({
   handlers: CommitHandlers;
 }) {
   const theme = useTheme();
-  const [unfolded, setUnfolded] = useState(false);
+  // Reset when the recycled row shows another commit, so one "Show more" does not unfold the next.
+  const [unfolded, setUnfolded] = useRecyclingState(false, [commit.id]);
   const lane = laneColor(theme, commit.author?.lane);
   const deleted = typeof commit.deleted_at === 'string';
   const inFeed = continuesNext !== undefined;
@@ -82,7 +84,7 @@ export const CommitRow = memo(function CommitRow({
   return (
     <View style={[styles.row, { backgroundColor: theme.surface }]}>
       <View style={[styles.content, { paddingTop: inset, paddingBottom: threadBelow ? 0 : inset + (hasHairline ? 1 : 0), minHeight: muted ? 56 : 64 }, hasHairline && { borderBottomColor: theme.hairline, borderBottomWidth: StyleSheet.hairlineWidth }]}>
-        <Pressable onPress={open} disabled={!open} style={({ pressed }) => [styles.press, pressed && open !== undefined && styles.pressed]} accessibilityRole={open ? 'button' : undefined} accessibilityHint={open ? 'Opens the commit' : undefined}>
+        <Pressable onPress={open} disabled={!open} style={({ pressed }) => [styles.press, pressed && open !== undefined && { backgroundColor: theme.wash }]} accessibilityRole={open ? 'button' : undefined} accessibilityHint={open ? 'Opens the commit' : undefined}>
           <View style={styles.header}>
             <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, focused && styles.focusedName, muted && styles.mutedName]}>
               {commit.author.name || commit.author.handle}
@@ -110,7 +112,7 @@ export const CommitRow = memo(function CommitRow({
           </View>
 
           {commit.parent && (
-            <Pressable onPress={() => handlers.onOpen?.(commit.parent!)} style={styles.replyingTo} hitSlop={8}>
+            <Pressable onPress={() => handlers.onOpen?.(commit.parent!)} style={styles.replyingTo} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Replying to ${typeof commit.parent.deleted_at === 'string' ? 'a deleted commit' : `@${commit.parent.author?.handle}`}. Opens it`}>
               <CornerDownRight size={12} color={theme.inkMuted} strokeWidth={2} />
               <Text variant="mono" muted style={styles.tiny}>
                 replying to {typeof commit.parent.deleted_at === 'string' ? '[deleted]' : `@${commit.parent.author?.handle}`}
@@ -136,14 +138,14 @@ export const CommitRow = memo(function CommitRow({
           {commit.poll && <CommitPoll poll={commit.poll} canVote={canVote} onVote={handlers.onVote ? (optionId) => handlers.onVote?.(commit, optionId) : undefined} />}
           <CommitMedia images={commit.images} preview={commit.link_preview} compact={muted} />
           {laterParts > 0 && !focused && (
-            <Pressable onPress={() => handlers.onOpen?.(commit)} style={styles.seriesMore} hitSlop={8} accessibilityLabel={`${laterParts} more ${laterParts === 1 ? 'commit' : 'commits'} in this series`}>
+            <Pressable onPress={() => handlers.onOpen?.(commit)} style={styles.seriesMore} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${laterParts} more ${laterParts === 1 ? 'commit' : 'commits'} in this series`}>
               <ListOrdered size={14} color={theme.primary} strokeWidth={2} />
               <Text variant="mono" color={theme.primary} style={styles.tiny}>{laterParts} more {laterParts === 1 ? 'commit' : 'commits'} in this series</Text>
             </Pressable>
           )}
 
           {commit.quoted_commit && (
-            <Pressable onPress={() => handlers.onOpen?.(commit.quoted_commit!)} style={({ pressed }) => [styles.quoted, { borderColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]}>
+            <Pressable onPress={() => handlers.onOpen?.(commit.quoted_commit!)} style={({ pressed }) => [styles.quoted, { borderColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityLabel={`Quoted commit by ${commit.quoted_commit.author?.name || commit.quoted_commit.author?.handle}. Opens it`}>
               <View style={styles.header}>
                 <Text variant="name" numberOfLines={1} style={[styles.name, styles.mutedName]}>{commit.quoted_commit.author?.name || commit.quoted_commit.author?.handle}</Text>
                 <Text variant="mono" muted style={styles.tiny}>@{commit.quoted_commit.author?.handle} · {relativeTime(commit.quoted_commit.created_at)}</Text>
@@ -176,8 +178,8 @@ export const CommitRow = memo(function CommitRow({
 const styles = StyleSheet.create({
   row: { width: '100%' },
   content: { marginLeft: Space.rail, paddingRight: Space.gutter, gap: 4 },
-  press: { gap: 4 },
-  pressed: { opacity: 0.7 },
+  // The highlight bleeds past the text by the gutter so it reads as the row lighting up, not a box around words.
+  press: { gap: 4, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: Radius.lg, borderCurve: 'continuous' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
   name: { flexShrink: 1 },
   focusedName: { fontSize: 16 },
@@ -185,10 +187,10 @@ const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
   spacer: { flex: 1 },
   tiny: { fontSize: 12, lineHeight: 16 },
-  chip: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
+  chip: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: Radius.sm },
   replyingTo: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', minHeight: 24 },
-  quoted: { borderWidth: 1, borderRadius: 8, padding: 10, gap: 4, marginTop: 4 },
-  series: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 9999 },
+  quoted: { borderWidth: 1, borderRadius: Radius.lg, borderCurve: 'continuous', padding: 10, gap: 4, marginTop: 4 },
+  series: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full },
   seriesMore: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, minHeight: 28 },
   showMore: { alignSelf: 'flex-start', paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
   translated: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 24 },

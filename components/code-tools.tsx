@@ -1,9 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
 import { Check, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Sheet } from '@/components/sheet';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { fence, fenceChunk, guessLanguage, insertedChunk, Languages, looksLikeCode } from '@/lib/code-paste';
@@ -131,14 +131,14 @@ export function CodeSuggestion({ paste }: { paste: CodePaste }) {
       <Text variant="small" muted numberOfLines={1} style={styles.shrink}>
         Pasted {lines === 1 ? 'a line' : `${lines} lines`} of code?
       </Text>
-      <Pressable onPress={paste.chooseLanguage} style={[styles.pill, { borderColor: theme.hairline, backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityLabel={`Language: ${label}`} hitSlop={6}>
+      <Pressable onPress={paste.chooseLanguage} style={[styles.pill, { borderColor: theme.hairline, backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityLabel={`Language: ${label}`} hitSlop={8}>
         <Text variant="mono" style={styles.pillText}>{label}</Text>
       </Pressable>
-      <Pressable onPress={() => paste.wrap()} style={[styles.pill, { borderColor: theme.primary, backgroundColor: theme.primarySoft }]} accessibilityRole="button" accessibilityLabel="Wrap in a code block" hitSlop={6}>
+      <Pressable onPress={() => paste.wrap()} style={[styles.pill, { borderColor: theme.primary, backgroundColor: theme.primarySoft }]} accessibilityRole="button" accessibilityLabel="Wrap in a code block" hitSlop={8}>
         <Check size={14} color={theme.primary} strokeWidth={2.5} />
         <Text variant="mono" color={theme.primary} style={styles.pillText}>Wrap</Text>
       </Pressable>
-      <Pressable onPress={paste.dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Leave as text">
+      <Pressable onPress={paste.dismiss} hitSlop={14} accessibilityRole="button" accessibilityLabel="Leave as text">
         <X size={16} color={theme.inkMuted} strokeWidth={2} />
       </Pressable>
     </View>
@@ -148,12 +148,9 @@ export function CodeSuggestion({ paste }: { paste: CodePaste }) {
 /** The languages a fence can name, as a sheet; the one in use is ticked. */
 export function LanguageSheet({ paste }: { paste: CodePaste }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={paste.choosing !== null} transparent animationType="fade" onRequestClose={paste.closeSheet} statusBarTranslucent>
-      <Pressable onPress={paste.closeSheet} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
-        <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <Sheet visible={paste.choosing !== null} onClose={paste.closeSheet} style={styles.sheet} maxHeight="70%">
           <Text variant="section" style={styles.sheetTitle}>{paste.choosing === 'clipboard' ? 'Paste the clipboard as' : 'Wrap as'}</Text>
           <ScrollView style={styles.languages} keyboardShouldPersistTaps="handled">
             {Languages.map((language) => (
@@ -164,9 +161,7 @@ export function LanguageSheet({ paste }: { paste: CodePaste }) {
               </Pressable>
             ))}
           </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -175,8 +170,7 @@ const styles = StyleSheet.create({
   shrink: { flex: 1 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 10, borderRadius: Radius.full, borderWidth: 1 },
   pillText: { fontSize: 12, lineHeight: 16 },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 12, maxHeight: '70%' },
+  sheet: { paddingTop: 12 },
   sheetTitle: { paddingHorizontal: 20, paddingBottom: 8 },
   languages: { flexGrow: 0 },
   language: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 12 },

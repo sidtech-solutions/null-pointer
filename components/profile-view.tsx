@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useRouter } from 'expo-router';
 import { Building2, CalendarDays, Clock, Ellipsis, Link as LinkIcon, MapPin, MessageSquare, Pin, Radio, Star, Terminal } from 'lucide-react-native';
 import { type ReactNode, useMemo, useState } from 'react';
-import { ActionSheetIOS, Alert, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { AchievementsShelf } from '@/components/achievements';
 import { ActivityGraph } from '@/components/activity-graph';
@@ -18,6 +18,8 @@ import { SkeletonRow } from '@/components/skeleton-row';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
+import { compact } from '@/lib/display';
+import { showOptions } from '@/lib/options';
 import { api, ApiError, nextCursor } from '@/lib/client';
 import { useNow } from '@/lib/now';
 import { feedRows } from '@/lib/timeline';
@@ -34,7 +36,7 @@ const Tabs: { key: Tab; label: string }[] = [
 
 const Months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpenScheduled, footer }: { username: string; onOpenConnections: (type: 'followers' | 'following') => void; onOpenStarred?: () => void; onOpenScheduled?: () => void; footer?: ReactNode }) {
+export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpenScheduled, footer, bottomInset = 0 }: { username: string; onOpenConnections: (type: 'followers' | 'following') => void; onOpenStarred?: () => void; onOpenScheduled?: () => void; footer?: ReactNode; /** Outside the tabs, the home indicator's height, so the last row clears it. */ bottomInset?: number }) {
   const theme = useTheme();
   const router = useRouter();
   const account = useAccount();
@@ -80,15 +82,10 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpen
       }
     };
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 2, destructiveButtonIndex: 1 }, (index) => act(options[index]));
-    } else {
-      Alert.alert(handle, undefined, [
-        { text: options[0], onPress: () => act(options[0]) },
-        { text: 'Block', style: 'destructive', onPress: () => act('Block') },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    showOptions(handle, [
+      { label: options[0], run: () => act(options[0]) },
+      { label: 'Block', destructive: true, run: () => act('Block') },
+    ]);
   };
   const [tab, setTab] = useState<Tab>('commits');
   const [refreshing, setRefreshing] = useState(false);
@@ -133,12 +130,12 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpen
             {isMe ? (
               <View style={styles.actions}>
                 {onOpenScheduled && (
-                  <Pressable onPress={onOpenScheduled} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Scheduled commits">
+                  <Pressable onPress={onOpenScheduled} hitSlop={4} style={({ pressed }) => [styles.iconButton, { backgroundColor: pressed ? theme.wash : theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Scheduled commits">
                     <Clock size={16} color={theme.ink} strokeWidth={2} />
                   </Pressable>
                 )}
                 {onOpenStarred && (
-                  <Pressable onPress={onOpenStarred} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Starred commits">
+                  <Pressable onPress={onOpenStarred} hitSlop={4} style={({ pressed }) => [styles.iconButton, { backgroundColor: pressed ? theme.wash : theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="Starred commits">
                     <Star size={16} color={theme.ink} strokeWidth={2} />
                   </Pressable>
                 )}
@@ -146,11 +143,11 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpen
               </View>
             ) : (
               <View style={styles.actions}>
-                <Pressable onPress={more} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="More">
+                <Pressable onPress={more} hitSlop={4} style={({ pressed }) => [styles.iconButton, { backgroundColor: pressed ? theme.wash : theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel="More">
                   <Ellipsis size={16} color={theme.ink} strokeWidth={2} />
                 </Pressable>
                 {canPush && (
-                  <Pressable onPress={() => router.push({ pathname: '/remotes/[target]', params: { target: `@${username}` } })} style={[styles.iconButton, { backgroundColor: theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel={`Push a message to @${username}`}>
+                  <Pressable onPress={() => router.push({ pathname: '/remotes/[target]', params: { target: `@${username}` } })} hitSlop={4} style={({ pressed }) => [styles.iconButton, { backgroundColor: pressed ? theme.wash : theme.shell, borderColor: theme.rail }]} accessibilityRole="button" accessibilityLabel={`Push a message to @${username}`}>
                     <MessageSquare size={16} color={theme.ink} strokeWidth={2} />
                   </Pressable>
                 )}
@@ -258,6 +255,7 @@ export function ProfileView({ username, onOpenConnections, onOpenStarred, onOpen
     <Feed
       items={items}
       viewerId={account.user?.id}
+      contentContainerStyle={{ paddingBottom: bottomInset }}
       handlers={handlers}
       ListHeaderComponent={header}
       onEndReached={() => {
@@ -310,7 +308,7 @@ function Fact({ icon, label, onPress }: { icon: ReactNode; label: string; onPres
 function Count({ value, singular, plural, onPress }: { value: number; singular: string; plural: string; onPress?: () => void }) {
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={styles.count} accessibilityLabel={`${value} ${value === 1 ? singular : plural}`}>
-      <Text variant="monoMedium">{value}</Text>
+      <Text variant="monoMedium">{compact(value)}</Text>
       <Text variant="small" muted>{value === 1 ? singular : plural}</Text>
     </Pressable>
   );
@@ -326,7 +324,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: Space.gutter, paddingTop: 24, paddingBottom: 16, gap: 16 },
   top: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconButton: { width: 32, height: 32, borderRadius: Radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 36, height: 36, borderRadius: Radius.md, borderCurve: 'continuous', borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   ring: { width: 92, height: 92, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   ringGap: { width: 88, height: 88, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
   names: { gap: 4 },

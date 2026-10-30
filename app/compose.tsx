@@ -1,26 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, usePreventRemove, useRouter } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { Clock, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CodeSuggestion, LanguageSheet, useCodePaste } from '@/components/code-tools';
 import { CommitBody } from '@/components/commit-body';
 import { DraftPreview } from '@/components/draft-preview';
-import { IssueSuggestion } from '@/components/issue-suggestion';
-import { MentionSuggestions } from '@/components/mention-suggestions';
+import { DraftTools } from '@/components/draft-tools';
 import { SchedulePicker } from '@/components/schedule-picker';
-import { AttachmentStrip, BodyCounter, ComposerInput, ComposerToolbar, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
+import { AttachmentStrip, ComposerToolbar, DraftCounter, DraftInput, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
 import { api, ApiError } from '@/lib/client';
 import { findCachedCommit, prependCommit } from '@/lib/commit-cache';
 import { fits, length, MaxLength, relativeTime, shortHash } from '@/lib/display';
+import { createDraft, type Draft, useDraftText } from '@/lib/draft';
+import { notify } from '@/lib/haptics';
 import { useKeyboardShown } from '@/lib/keyboard';
-import { insertIssue, insertMention, issueReferenceBeforeCaret, mentionBeforeCaret, useIssueSuggestion, useMentionSuggestions } from '@/lib/mentions';
 import { isOnline } from '@/lib/network';
 import { enqueue, isOffline } from '@/lib/outbox';
 import { scheduledAtOf, scheduleLabel } from '@/lib/schedule';
@@ -28,17 +27,25 @@ import { sharedText, withShared } from '@/lib/share-target';
 import { dropStash, getStash, putStash } from '@/lib/stash';
 import { toast } from '@/lib/toast';
 import { refreshStreakWidget } from '@/lib/widgets';
-import type { IssueSuggestion as Issue, NewPoll, User } from '@/lib/types';
+import type { NewPoll } from '@/lib/types';
 
 export default function ComposeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const account = useAccount();
+  // Set once the commit is on its way, so the guard lets the screen go.
+  const [left, setLeft] = useState(false);
+  const leave = () => {
+    setLeft(true);
+    router.back();
+  };
   const { quote } = useLocalSearchParams<{ quote?: string }>();
   const stashName = quote ? `quote-${quote}` : 'composer';
-  const [body, setBody] = useState('');
+  // The text lives outside React: a keystroke re-renders the input and the strips that read it, not this screen.
+  const [draft] = useState(() => createDraft(''));
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -46,53 +53,9 @@ export default function ComposeScreen() {
   const [previewing, setPreviewing] = useState(false);
   const attachments = useAttachments();
   const keyboardShown = useKeyboardShown();
-  const [caret, setCaret] = useState(0);
-  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
-  const mention = mentionBeforeCaret(body, caret);
-  const suggestions = useMentionSuggestions(mention, { quote });
-  const issueToken = mention ? null : issueReferenceBeforeCaret(body, caret);
-  const issue = useIssueSuggestion(issueToken);
   // When the commit should go, or null for now. Only a top-level commit waits, as on the web.
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [picking, setPicking] = useState(false);
-
-  // The caret is placed once after a pick, then the input is left to itself again.
-  useEffect(() => {
-    if (selection) {
-      const timer = setTimeout(() => setSelection(undefined), 50);
-
-      return () => clearTimeout(timer);
-    }
-  }, [selection]);
-
-  const pickMention = (user: User) => {
-    if (!mention) {
-      return;
-    }
-
-    const next = insertMention(body, mention, user.handle);
-    setBody(next.text);
-    setCaret(next.caret);
-    setSelection({ start: next.caret, end: next.caret });
-  };
-
-  const pickIssue = (picked: Issue) => {
-    if (!issueToken) {
-      return;
-    }
-
-    const next = insertIssue(body, issueToken, picked.number);
-    setBody(next.text);
-    setCaret(next.caret);
-    setSelection({ start: next.caret, end: next.caret });
-  };
-
-  // Pasted code is offered a fence; the clipboard can be pasted straight in as one.
-  const paste = useCodePaste(body, caret, (text, at) => {
-    setBody(text);
-    setCaret(at);
-    setSelection({ start: at, end: at });
-  });
 
   const quoted = useQuery({
     queryKey: ['commit', quote],
@@ -106,18 +69,41 @@ export default function ComposeScreen() {
   });
 
   useEffect(() => {
-    getStash(account.user?.id, stashName).then((draft) => {
-      setBody(draft);
-      setRestored(draft !== '');
+    getStash(account.user?.id, stashName).then((stashed) => {
+      // Anything typed before the stash came back wins over the stash.
+      if (stashed !== '' && draft.get() === '') {
+        draft.write(stashed);
+      }
+
+      setRestored(stashed !== '');
       setReady(true);
     });
-  }, [account.user?.id, stashName]);
+  }, [account.user?.id, stashName, draft]);
 
+  // The draft is kept a moment after the last keystroke, not on every one, and
+  // once more on the way out: storage stays off the typing path. Emptying the
+  // text also retires the stash label.
   useEffect(() => {
-    if (ready) {
-      putStash(account.user?.id, stashName, body);
+    if (!ready) {
+      return;
     }
-  }, [body, ready, account.user?.id, stashName]);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = draft.subscribe(() => {
+      if (draft.get() === '') {
+        setRestored(false);
+      }
+
+      clearTimeout(timer);
+      timer = setTimeout(() => putStash(account.user?.id, stashName, draft.get()), 400);
+    });
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+      putStash(account.user?.id, stashName, draft.get());
+    };
+  }, [ready, account.user?.id, stashName, draft]);
 
   // Something another app shared lands here once the stash is back: its text under the draft, its images attached.
   const share = useShareIntentContext();
@@ -134,37 +120,35 @@ export default function ComposeScreen() {
     share.resetShareIntent();
 
     if (text !== '') {
+      draft.write(withShared(draft.get(), text));
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setBody((current) => withShared(current, text));
       setRestored(false);
     }
 
     if (files.length > 0) {
       addShared(files);
     }
-  }, [ready, share, addShared]);
+  }, [ready, share, addShared, draft]);
 
   const hasImages = attachments.images.length > 0;
   // With images the body may be empty; a poll needs its question. Either way a non-empty body must fit.
-  const bodyReady = hasImages && body.trim() === '' ? true : fits(body);
-  const canCommit = bodyReady && length(body) <= MaxLength && (poll === null || pollFits(poll));
+  const canCommit = (body: string) => (hasImages && body.trim() === '' ? true : fits(body)) && length(body) <= MaxLength && (poll === null || pollFits(poll));
 
   const commit = useMutation({
     mutationFn: async () => {
       const { uploads, descriptions } = await toUploads(attachments.images);
 
-      return api.createCommit(body.trim(), { quotedCommitId: quote ?? null, images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
+      return api.createCommit(draft.get().trim(), { quotedCommitId: quote ?? null, images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
     },
     onSuccess: async (created) => {
       await dropStash(account.user?.id, stashName);
-      setBody('');
-      attachments.clear();
-      setPoll(null);
+      // Leave first: the screen unmounts under the dismiss, so nothing flashes empty.
+      leave();
       prependCommit(queryClient, created);
       queryClient.invalidateQueries({ queryKey: ['log'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       refreshStreakWidget({ force: true });
-      router.back();
+      notify('success');
       toast(`[log ${created.short_hash || shortHash(created.id)}] ${(created.body || (created.images?.length ? `${created.images.length} ${created.images.length === 1 ? 'image' : 'images'}` : '')).split('\n')[0].slice(0, 60)}`);
     },
     onError: (exception) => {
@@ -174,6 +158,7 @@ export default function ComposeScreen() {
         return;
       }
 
+      notify('error');
       setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not commit.');
     },
   });
@@ -183,16 +168,13 @@ export default function ComposeScreen() {
     mutationFn: async () => {
       const { uploads, descriptions } = await toUploads(attachments.images);
 
-      return api.scheduleCommit(body.trim(), scheduledAtOf(scheduledAt ?? new Date()), { images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
+      return api.scheduleCommit(draft.get().trim(), scheduledAtOf(scheduledAt ?? new Date()), { images: uploads, descriptions, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null });
     },
     onSuccess: async (created) => {
       await dropStash(account.user?.id, stashName);
-      setBody('');
-      attachments.clear();
-      setPoll(null);
-      setScheduledAt(null);
+      leave();
       queryClient.invalidateQueries({ queryKey: ['scheduled'] });
-      router.back();
+      notify('success');
       toast(`Scheduled for ${scheduleLabel(created.scheduled_at)}.`);
     },
     onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : exception instanceof Error && exception.message ? exception.message : 'fatal: could not schedule the commit.'),
@@ -200,14 +182,12 @@ export default function ComposeScreen() {
 
   // No connection: the draft goes to the outbox and is pushed when one comes back.
   const keepForLater = async () => {
-    const trimmed = body.trim();
+    const trimmed = draft.get().trim();
 
     await enqueue({ body: trimmed, quotedCommitId: quote ?? null, poll: poll ? { ...poll, options: poll.options.map((option) => option.trim()) } : null, images: attachments.images });
     await dropStash(account.user?.id, stashName);
-    setBody('');
-    attachments.clear();
-    setPoll(null);
-    router.back();
+    leave();
+    notify('warning');
     toast('Offline. Kept in the outbox; it commits when you are back online.');
   };
 
@@ -226,18 +206,18 @@ export default function ComposeScreen() {
   const handle = quoted.data?.commit.author?.handle;
   const busy = commit.isPending || schedule.isPending;
 
-  const cancel = () => {
-    if (hasImages || poll) {
-      Alert.alert('Discard this commit?', hasImages ? 'Your text is kept, the images are not.' : 'Your text is kept, the poll is not.', [
-        { text: 'Keep editing', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-      ]);
+  // Text survives in the stash; images and a poll do not. Leaving with either
+  // asks first, whether by Cancel, the iOS swipe down or Android back.
+  const dirty = (hasImages || poll !== null) && !left;
 
-      return;
-    }
+  usePreventRemove(dirty, ({ data }) => {
+    Alert.alert('Discard this commit?', hasImages ? 'Your text is kept, the images are not.' : 'Your text is kept, the poll is not.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
 
-    router.back();
-  };
+  const cancel = () => router.back();
 
   const togglePoll = () => {
     setError(null);
@@ -245,16 +225,14 @@ export default function ComposeScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? 12 : insets.top }]}>
+    <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? Math.max(12, insets.top - 44) : insets.top }]}>
       <View style={[styles.bar, { borderBottomColor: theme.hairline }]}>
         <Pressable onPress={cancel} disabled={busy} hitSlop={8} style={styles.barButton} accessibilityRole="button" accessibilityHint="Keeps your draft for next time">
           <Text variant="nav">Cancel</Text>
         </Pressable>
         <Text variant="name" numberOfLines={1} style={styles.title}>{quote ? `Quote @${handle ?? ''}` : 'New commit'}</Text>
         <View style={styles.barButton}>
-          <Pressable onPress={submit} disabled={!canCommit || busy} style={[styles.commit, { backgroundColor: accent, opacity: canCommit || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !canCommit || busy, busy }}>
-            {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>{scheduledAt ? 'Schedule' : 'Commit'}</Text>}
-          </Pressable>
+          <SubmitButton draft={draft} canCommit={canCommit} busy={busy} accent={accent} label={scheduledAt ? 'Schedule' : 'Commit'} onPress={submit} />
         </View>
       </View>
 
@@ -262,18 +240,10 @@ export default function ComposeScreen() {
         {error && <Text variant="small" color={theme.destructive}>{error}</Text>}
 
         {previewing ? (
-          <DraftPreview body={body} author={account.user} images={attachments.images} poll={poll} quoted={quoted.data?.commit ?? null} onOpenMention={(username) => router.push({ pathname: '/users/[username]', params: { username } })} />
+          <DraftPreview body={draft.get()} author={account.user} images={attachments.images} poll={poll} quoted={quoted.data?.commit ?? null} onOpenMention={(username) => router.push({ pathname: '/users/[username]', params: { username } })} />
         ) : (
-          <ComposerInput
-            value={body}
-            onChangeText={(text) => {
-              setBody(text);
-              if (text === '') {
-                setRestored(false);
-              }
-            }}
-            onSelectionChange={(event) => setCaret(event.nativeEvent.selection.end)}
-            selection={selection}
+          <DraftInput
+            draft={draft}
             placeholder={quote ? 'Add your take' : poll ? 'Ask a question' : hasImages ? 'Say something about it (optional)' : 'What did you ship?'}
             autoFocus
             editable={!busy}
@@ -288,7 +258,7 @@ export default function ComposeScreen() {
             <Pressable onPress={() => setPicking(true)} style={styles.scheduledText} accessibilityRole="button" accessibilityLabel={`Scheduled for ${scheduleLabel(scheduledAt)}. Change`}>
               <Text variant="small" color={theme.primary} numberOfLines={1}>Commits {scheduleLabel(scheduledAt)}</Text>
             </Pressable>
-            <Pressable onPress={() => setScheduledAt(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Commit now instead">
+            <Pressable onPress={() => setScheduledAt(null)} hitSlop={14} accessibilityRole="button" accessibilityLabel="Commit now instead">
               <X size={16} color={theme.primary} strokeWidth={2} />
             </Pressable>
           </View>
@@ -309,27 +279,39 @@ export default function ComposeScreen() {
         )}
       </ScrollView>
 
-      {!previewing && <CodeSuggestion paste={paste} />}
-      {!previewing && <MentionSuggestions users={suggestions} onPick={pickMention} />}
-      {!previewing && <IssueSuggestion issue={issue} onPick={pickIssue} />}
-      <LanguageSheet paste={paste} />
       <SchedulePicker visible={picking} value={scheduledAt} onPick={setScheduledAt} onClear={() => setScheduledAt(null)} onClose={() => setPicking(false)} />
 
-      <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
-        <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)} onPasteCode={paste.fromClipboard} onSchedule={quote ? undefined : () => setPicking(true)} scheduled={scheduledAt !== null}>
-          {restored && (
-            <StashLabel
-              onDrop={() => {
-                setBody('');
-                setRestored(false);
-                dropStash(account.user?.id, stashName);
-              }}
-            />
-          )}
-          <BodyCounter body={body} />
-        </ComposerToolbar>
-      </View>
+      <DraftTools draft={draft} context={{ quote }} hidden={previewing}>
+        {(paste) => (
+          <View style={[styles.footer, { borderTopColor: theme.hairline, paddingBottom: keyboardShown ? 4 : Math.max(insets.bottom, 8) }]}>
+            <ComposerToolbar attachments={attachments} poll={poll} onTogglePoll={togglePoll} withPoll={!quote} previewing={previewing} onTogglePreview={() => setPreviewing((current) => !current)} onPasteCode={paste.fromClipboard} onSchedule={quote ? undefined : () => setPicking(true)} scheduled={scheduledAt !== null}>
+              {restored && (
+                <StashLabel
+                  onDrop={() => {
+                    draft.write('');
+                    setRestored(false);
+                    dropStash(account.user?.id, stashName);
+                  }}
+                />
+              )}
+              <DraftCounter draft={draft} />
+            </ComposerToolbar>
+          </View>
+        )}
+      </DraftTools>
     </KeyboardAvoidingView>
+  );
+}
+
+/** Enabled by what is written; reads the draft itself so the bar above it stays still while typing. */
+function SubmitButton({ draft, canCommit, busy, accent, label, onPress }: { draft: Draft; canCommit: (body: string) => boolean; busy: boolean; accent: string; label: string; onPress: () => void }) {
+  const theme = useTheme();
+  const enabled = canCommit(useDraftText(draft));
+
+  return (
+    <Pressable onPress={onPress} disabled={!enabled || busy} hitSlop={{ top: 4, bottom: 4 }} style={({ pressed }) => [styles.commit, pressed && styles.commitPressed, { backgroundColor: accent, opacity: enabled || busy ? 1 : 0.5 }]} accessibilityRole="button" accessibilityState={{ disabled: !enabled || busy, busy }}>
+      {busy ? <ActivityIndicator color={theme.primaryInk} /> : <Text variant="label" color={theme.primaryInk}>{label}</Text>}
+    </Pressable>
   );
 }
 
@@ -338,13 +320,14 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 12, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   barButton: { minWidth: 96, minHeight: 44, justifyContent: 'center', alignItems: 'flex-start' },
   title: { flex: 1, textAlign: 'center', fontSize: 16 },
-  commit: { alignSelf: 'flex-end', height: 36, minWidth: 84, paddingHorizontal: 16, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  commit: { alignSelf: 'flex-end', height: 36, minWidth: 84, paddingHorizontal: 16, borderRadius: Radius.md, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
+  commitPressed: { opacity: 0.85 },
   scroll: { flex: 1 },
   body: { paddingHorizontal: Space.gutterWide - 4, paddingTop: 16, paddingBottom: 24, gap: 16 },
   input: { minHeight: 120 },
   scheduled: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, height: 36, borderRadius: Radius.lg },
   scheduledText: { flex: 1 },
-  quoted: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
+  quoted: { borderWidth: 1, borderRadius: Radius.lg, borderCurve: 'continuous', padding: 12, gap: 4 },
   quotedHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   quotedName: { flexShrink: 1, fontSize: 14 },
   tiny: { fontSize: 12, lineHeight: 16 },

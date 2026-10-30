@@ -77,7 +77,7 @@ export const ThreadReply = memo(function ThreadReply({
                   </Text>
                 </View>
                 {onToggleNested && reply.replies_count > 0 && (
-                  <Pressable onPress={() => onToggleNested(reply)} style={styles.nestedToggle} hitSlop={4} accessibilityRole="button" accessibilityLabel={nestedOpen ? 'Hide replies' : count(reply.replies_count, 'reply', 'replies')}>
+                  <Pressable onPress={() => onToggleNested(reply)} style={styles.nestedToggle} hitSlop={10} accessibilityRole="button" accessibilityLabel={nestedOpen ? 'Hide replies' : count(reply.replies_count, 'reply', 'replies')}>
                     {nestedOpen ? <ChevronDown size={14} color={theme.primary} strokeWidth={2} /> : <ChevronRight size={14} color={theme.primary} strokeWidth={2} />}
                     <Text variant="small" color={theme.primary} style={styles.tiny13}>{nestedOpen ? 'Hide replies' : count(reply.replies_count, 'reply', 'replies')}</Text>
                   </Pressable>
@@ -86,7 +86,7 @@ export const ThreadReply = memo(function ThreadReply({
             ) : (
               <>
                 {/* The text opens the reply; the actions under it are siblings, never nested in the press area. */}
-                <Pressable onPress={() => handlers.onOpen?.(reply)} style={({ pressed }) => [styles.press, pressed && styles.pressed]} accessibilityRole="button" accessibilityHint="Opens the reply">
+                <Pressable onPress={() => handlers.onOpen?.(reply)} style={({ pressed }) => [styles.press, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button" accessibilityHint="Opens the reply">
                   <View style={styles.header}>
                     <Text variant="name" muted={muted} numberOfLines={1} style={[styles.name, muted && styles.mutedName]}>{reply.author.name || reply.author.handle}</Text>
                     <Text variant="mono" muted style={styles.tiny}>·</Text>

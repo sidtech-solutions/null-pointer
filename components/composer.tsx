@@ -1,13 +1,15 @@
 import { Image } from 'expo-image';
 import { Camera, ChartBar, Clock, Code, Eye, FoldVertical, ImagePlus, Plus, X } from 'lucide-react-native';
-import { type ReactNode, useCallback, useState } from 'react';
+import { type ComponentRef, type ReactNode, type Ref, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, Linking, Platform, Pressable, StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
 
 import { Text } from '@/components/text';
 import { Fonts, Radius, useTheme } from '@/constants/theme';
 import type { Upload } from '@/lib/client';
 import { CountFrom, length, MaxLength } from '@/lib/display';
+import { type Draft, useDraftText, useDraftVersion } from '@/lib/draft';
 import { type Attachment, attachmentsFromShared, ImageError, MaxDescriptionLength, MaxImages, pickImages, readForUpload, type SharedFile, type Source } from '@/lib/images';
+import { showOptions } from '@/lib/options';
 import { type NewPoll, PollDurations, PollLimits } from '@/lib/types';
 
 export function BodyCounter({ body }: { body: string }) {
@@ -16,7 +18,7 @@ export function BodyCounter({ body }: { body: string }) {
 
   if (remaining <= CountFrom) {
     return (
-      <Text variant="mono" color={remaining <= 0 ? theme.destructive : remaining <= 20 ? '#b45309' : theme.inkMuted} accessibilityLabel={`${remaining} characters left`}>
+      <Text variant="mono" color={remaining <= 0 ? theme.destructive : remaining <= 20 ? theme.warning : theme.inkMuted} accessibilityLabel={`${remaining} characters left`}>
         {remaining}
       </Text>
     );
@@ -29,12 +31,13 @@ export function BodyCounter({ body }: { body: string }) {
   return null;
 }
 
-export function ComposerInput({ style, ...props }: TextInputProps) {
+export function ComposerInput({ style, ref, ...props }: TextInputProps & { ref?: Ref<ComponentRef<typeof TextInput>> }) {
   const theme = useTheme();
 
   return (
     <TextInput
       {...props}
+      ref={ref}
       multiline
       maxLength={MaxLength}
       placeholderTextColor={theme.inkMuted}
@@ -42,6 +45,32 @@ export function ComposerInput({ style, ...props }: TextInputProps) {
       style={[styles.input, { color: theme.ink }, style]}
     />
   );
+}
+
+/**
+ * The composer's input bound to a Draft. It is the only thing that re-renders
+ * on a keystroke; when code writes the draft (a picked mention, a fenced paste,
+ * the restored stash) it takes the text and places the caret once.
+ */
+export function DraftInput({ draft, ...props }: Omit<TextInputProps, 'value' | 'onChangeText' | 'onSelectionChange' | 'selection'> & { draft: Draft }) {
+  const text = useDraftText(draft);
+  const version = useDraftVersion(draft);
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
+
+  useLayoutEffect(() => {
+    if (version > 0) {
+      const caret = draft.caret();
+      // RN adds setSelection to the instance at runtime; its types do not list it yet.
+      (input.current as unknown as { setSelection?: (start: number, end: number) => void } | null)?.setSelection?.(caret, caret);
+    }
+  }, [draft, version]);
+
+  return <ComposerInput {...props} ref={input} value={text} onChangeText={draft.typed} onSelectionChange={(event) => draft.moved(event.nativeEvent.selection.end)} />;
+}
+
+/** The counter, reading the draft itself so the screen need not. */
+export function DraftCounter({ draft }: { draft: Draft }) {
+  return <BodyCounter body={useDraftText(draft)} />;
 }
 
 export function StashLabel({ onDrop }: { onDrop: () => void }) {
@@ -149,10 +178,9 @@ export function chooseImageSource(pick: (source: Source) => void): void {
     return;
   }
 
-  Alert.alert('Attach an image', undefined, [
-    { text: 'Photo library', onPress: () => pick('library') },
-    { text: 'Take photo', onPress: () => pick('camera') },
-    { text: 'Cancel', style: 'cancel' },
+  showOptions('Attach an image', [
+    { label: 'Photo library', run: () => pick('library') },
+    { label: 'Take photo', run: () => pick('camera') },
   ]);
 }
 

@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +17,6 @@ import type { SshKey } from '@/lib/ssh-key';
 export default function Onboarding() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const account = useAccount();
   const [key, setKey] = useState<SshKey | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +48,6 @@ export default function Onboarding() {
 
             if (!cancelled && me.user?.handle) {
               await account.signIn(me.user);
-              router.replace('/(tabs)');
             }
           } catch {
             // Not approved yet; fall through to the sign-in button.
@@ -82,7 +79,6 @@ export default function Onboarding() {
 
       if (outcome.type === 'signed-in') {
         await account.signIn(outcome.user);
-        router.replace('/(tabs)');
       } else if (outcome.type === 'error') {
         setError(outcome.message);
       }
@@ -121,7 +117,6 @@ export default function Onboarding() {
         }
 
         await account.signIn(me.user);
-        router.replace('/(tabs)');
       } catch (exception) {
         setError(
           exception instanceof ApiError

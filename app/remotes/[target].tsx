@@ -103,7 +103,7 @@ export default function ThreadScreen() {
 
   useEffect(() => {
     if (thread.error instanceof Unauthenticated) {
-      account.signOut().then(() => router.replace('/onboarding'));
+      account.signOut();
     }
   }, [thread.error, account, router]);
 
@@ -221,14 +221,19 @@ export default function ThreadScreen() {
 
   const stash = useMutation({
     mutationFn: () => api.stashRemote(target, !archived),
-    onSuccess: () => {
+    onMutate: () => {
       const stashed = !archived;
       thread.patch((current) => ({ ...current, is_archived: stashed }));
       removeFromInbox(queryClient, key);
-      queryClient.invalidateQueries({ queryKey: ['remotes'] });
-      toast(stashed ? `Stashed ${title}. It pops back when someone writes.` : `${title} is back in Open.`);
+
+      return stashed;
     },
-    onError: (error) => failed(error, 'fatal: could not stash.'),
+    onSuccess: (_result, _variables, stashed) => toast(stashed ? `Stashed ${title}. It pops back when someone writes.` : `${title} is back in Open.`),
+    onError: (error, _variables, stashed) => {
+      thread.patch((current) => ({ ...current, is_archived: !stashed }));
+      failed(error, 'fatal: could not stash.');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remotes'] }),
   });
 
   const merge = useMutation({
@@ -279,24 +284,48 @@ export default function ThreadScreen() {
 
   const pinConversation = useMutation({
     mutationFn: (pinned: boolean) => api.pinRemote(target, pinned),
+    onMutate: (pinned) => {
+      const before = data?.pinned_at ?? null;
+      const guess = pinned ? new Date().toISOString() : null;
+      thread.patch((current) => ({ ...current, pinned_at: guess }));
+      patchInbox(queryClient, key, (row) => ({ ...row, pinned_at: guess }));
+
+      return before;
+    },
     onSuccess: (pinnedAt) => {
       thread.patch((current) => ({ ...current, pinned_at: pinnedAt }));
       patchInbox(queryClient, key, (row) => ({ ...row, pinned_at: pinnedAt }));
-      queryClient.invalidateQueries({ queryKey: ['remotes'] });
       toast(pinnedAt ? `Pinned ${title} to the top of your inbox.` : `Unpinned ${title}.`);
     },
-    onError: (error) => failed(error, 'fatal: could not pin.'),
+    onError: (error, _pinned, before) => {
+      thread.patch((current) => ({ ...current, pinned_at: before ?? null }));
+      patchInbox(queryClient, key, (row) => ({ ...row, pinned_at: before ?? null }));
+      failed(error, 'fatal: could not pin.');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remotes'] }),
   });
 
   const mute = useMutation({
     mutationFn: (duration: MuteDuration) => api.muteRemote(target, duration),
+    onMutate: (duration) => {
+      const before = data?.muted_until_at ?? null;
+      const guess = duration === 'off' ? null : '9999-12-31T00:00:00Z';
+      thread.patch((current) => ({ ...current, muted_until_at: guess }));
+      patchInbox(queryClient, key, (row) => ({ ...row, muted_until_at: guess }));
+
+      return before;
+    },
     onSuccess: (mutedUntil, duration) => {
       const until = duration === 'off' ? null : (mutedUntil ?? '9999-12-31T00:00:00Z');
       thread.patch((current) => ({ ...current, muted_until_at: until }));
       patchInbox(queryClient, key, (row) => ({ ...row, muted_until_at: until }));
       toast(duration === 'off' ? `${title} is loud again.` : `Muted ${title}.`);
     },
-    onError: (error) => failed(error, 'fatal: could not mute.'),
+    onError: (error, _duration, before) => {
+      thread.patch((current) => ({ ...current, muted_until_at: before ?? null }));
+      patchInbox(queryClient, key, (row) => ({ ...row, muted_until_at: before ?? null }));
+      failed(error, 'fatal: could not mute.');
+    },
   });
 
   const chooseMute = () =>

@@ -67,7 +67,7 @@ export function WhoToFollow({ context, title = 'who to follow' }: { context?: { 
     <View style={[styles.wrap, { borderBottomColor: theme.hairline }]}>
       <View style={styles.heading}>
         <Text variant="mono" muted style={styles.title}>{title}</Text>
-        <Pressable onPress={() => setRound((current) => current + 1)} hitSlop={8} disabled={query.isFetching} accessibilityRole="button" accessibilityLabel="Show other people" style={{ opacity: query.isFetching ? 0.4 : 1 }}>
+        <Pressable onPress={() => setRound((current) => current + 1)} hitSlop={8} disabled={query.isFetching} accessibilityRole="button" accessibilityLabel="Show other people" style={({ pressed }) => [styles.refresh, { opacity: query.isFetching ? 0.4 : pressed ? 0.6 : 1 }]}>
           <RefreshCw size={14} color={theme.inkMuted} strokeWidth={2} />
         </Pressable>
       </View>
@@ -77,7 +77,7 @@ export function WhoToFollow({ context, title = 'who to follow' }: { context?: { 
 
         return (
           <View key={String(user.id)} style={styles.row}>
-            <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: user.handle } })} style={styles.person} accessibilityRole="button" accessibilityLabel={`${user.name || user.handle}'s profile`}>
+            <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: user.handle } })} style={({ pressed }) => [styles.person, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel={`${user.name || user.handle}'s profile`}>
               <Avatar user={user} size={40} lane={laneColor(theme, user.lane)} />
               <View style={styles.names}>
                 <View style={styles.nameRow}>
@@ -100,6 +100,7 @@ export function WhoToFollow({ context, title = 'who to follow' }: { context?: { 
 }
 
 const styles = StyleSheet.create({
+  refresh: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   wrap: { paddingLeft: Space.rail, paddingRight: Space.gutter, paddingTop: 12, paddingBottom: 8, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth },
   heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 4 },
   title: { fontSize: 12, lineHeight: 16 },

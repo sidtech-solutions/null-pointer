@@ -1,7 +1,7 @@
 import { CornerUpLeft, Pin, PinOff } from 'lucide-react-native';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Sheet } from '@/components/sheet';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { hasReacted, messageGist } from '@/lib/remotes';
@@ -38,12 +38,9 @@ export function MessageActions({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={message !== null} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable onPress={onClose} style={styles.backdrop} accessibilityLabel="Close" accessibilityRole="button">
-        <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <Sheet visible={message !== null} onClose={onClose} style={styles.sheet}>
           {message && (
             <>
               <Text variant="small" muted numberOfLines={2} style={styles.gist}>{messageGist(message) || 'Message'}</Text>
@@ -99,15 +96,12 @@ export function MessageActions({
               {!canReact && !canReply && !canPin && <Text variant="small" muted style={styles.gist}>Nothing to do with this message until the conversation opens.</Text>}
             </>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 12, paddingHorizontal: Space.gutter, gap: 8 },
+  sheet: { paddingTop: 12, paddingHorizontal: Space.gutter, gap: 8 },
   gist: { paddingHorizontal: 4, paddingBottom: 4 },
   reactions: { flexDirection: 'row', justifyContent: 'space-between' },
   reaction: { width: 48, height: 48, borderRadius: Radius.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

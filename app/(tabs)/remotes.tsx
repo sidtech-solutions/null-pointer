@@ -13,6 +13,7 @@ import { Header } from '@/components/header';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
+import { notify } from '@/lib/haptics';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
 import { refetchFromTop } from '@/lib/query-client';
 import { conversationTitle, isMuted, MuteChoices, summaryKey, targetOf, targetParam } from '@/lib/remotes';
@@ -143,25 +144,30 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
 
   useEffect(() => {
     if (query.error instanceof Unauthenticated) {
-      account.signOut().then(() => router.replace('/onboarding'));
+      account.signOut();
     }
   }, [query.error, account, router]);
 
   const conversations = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
 
+  // The row leaves the list as the sheet closes; if devnull refuses, a refetch brings it back.
   const stash = useMutation({
     mutationFn: ({ conversation, stashed }: { conversation: ConversationSummary; stashed: boolean }) => api.stashRemote(targetOf(conversation), stashed),
-    onSuccess: (_result, { conversation, stashed }) => {
+    onMutate: ({ conversation, stashed }) => {
       removeFromInbox(queryClient, summaryKey(conversation));
 
       if (stashed && conversation.ahead > 0) {
         bumpRemotesUnread(queryClient, -conversation.ahead);
       }
-
-      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+    },
+    onSuccess: (_result, { conversation, stashed }) => {
       toast(stashed ? `Stashed ${conversationTitle(conversation, account.user)}.` : `${conversationTitle(conversation, account.user)} is back in Open.`);
     },
-    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not stash.'),
+    onError: (error) => {
+      notify('error');
+      Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not stash.');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remotes'] }),
   });
 
   const settle = useMutation({
@@ -182,20 +188,38 @@ function InboxPage({ tab, term, active, loading, onRequests, onRefreshMe }: { ta
 
   const pin = useMutation({
     mutationFn: ({ conversation, pinned }: { conversation: ConversationSummary; pinned: boolean }) => api.pinRemote(targetOf(conversation), pinned),
-    onSuccess: (pinnedAt, { conversation }) => {
-      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, pinned_at: pinnedAt }));
-      queryClient.invalidateQueries({ queryKey: ['remotes'] });
+    onMutate: ({ conversation, pinned }) => {
+      const before = conversation.pinned_at;
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, pinned_at: pinned ? new Date().toISOString() : null }));
+
+      return before;
     },
-    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not pin.'),
+    onSuccess: (pinnedAt, { conversation }) => patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, pinned_at: pinnedAt })),
+    onError: (error, { conversation }, before) => {
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, pinned_at: before ?? null }));
+      notify('error');
+      Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not pin.');
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['remotes'] }),
   });
 
   const mute = useMutation({
     mutationFn: ({ conversation, duration }: { conversation: ConversationSummary; duration: MuteDuration }) => api.muteRemote(targetOf(conversation), duration),
+    onMutate: ({ conversation, duration }) => {
+      const before = conversation.muted_until_at;
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, muted_until_at: duration === 'off' ? null : '9999-12-31T00:00:00Z' }));
+
+      return before;
+    },
     onSuccess: (mutedUntil, { conversation, duration }) => {
       patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, muted_until_at: duration === 'off' ? null : (mutedUntil ?? '9999-12-31T00:00:00Z') }));
       toast(duration === 'off' ? `${conversationTitle(conversation, account.user)} is loud again.` : `Muted ${conversationTitle(conversation, account.user)}.`);
     },
-    onError: (error) => Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not mute.'),
+    onError: (error, { conversation }, before) => {
+      patchInbox(queryClient, summaryKey(conversation), (row) => ({ ...row, muted_until_at: before ?? null }));
+      notify('error');
+      Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: could not mute.');
+    },
   });
 
   const chooseMute = (conversation: ConversationSummary) =>

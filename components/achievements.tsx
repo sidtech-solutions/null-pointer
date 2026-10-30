@@ -1,11 +1,12 @@
 import { Award, Box, Check, ChevronRight, FileCode, Flame, GitMerge, Key, Maximize, Server, Shield, Sparkles, Star, Terminal, Zap } from 'lucide-react-native';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
+import { compact } from '@/lib/display';
 import type { Achievements, Badge } from '@/lib/types';
 
 function BadgeIcon({ icon, color, size = 14 }: { icon?: string; color: string; size?: number }) {
@@ -78,7 +79,7 @@ export function AchievementsShelf({ achievements, lane, handle }: { achievements
           <Award size={16} color={theme.ink} strokeWidth={2} />
           <Text variant="monoMedium" numberOfLines={1} style={styles.shrink}>{label(achievements)}</Text>
           <Text variant="mono" muted>·</Text>
-          <Text variant="mono" muted>{achievements.xp ?? 0} XP</Text>
+          <Text variant="mono" muted>{compact(achievements.xp ?? 0)} XP</Text>
           <View style={styles.spacer} />
           <Text variant="mono" muted style={styles.tiny}>{unlocked} / {badges.length} unlocked</Text>
           <ChevronRight size={14} color={theme.inkMuted} strokeWidth={2} />
@@ -122,7 +123,7 @@ function AchievementsSheet({ achievements, lane, handle, marked, open, onClose }
 
   return (
     <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom }]}>
+      <View style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
         <ScrollView contentContainerStyle={styles.sheetContent}>
           <View style={styles.row}>
             <Text variant="name" style={[styles.shrink, styles.sheetTitle]}>Developer Achievements</Text>
@@ -132,7 +133,7 @@ function AchievementsSheet({ achievements, lane, handle, marked, open, onClose }
             </View>
           </View>
           <Text variant="mono" muted style={styles.tiny}>
-            @{handle} · {achievements.xp ?? 0} XP · {unlocked}/{badges.length} badges unlocked
+            @{handle} · {compact(achievements.xp ?? 0)} XP · {unlocked}/{badges.length} badges unlocked
           </Text>
 
           <View style={[styles.card, { borderColor: theme.hairline, backgroundColor: `${theme.wash}4d` }]}>
@@ -203,8 +204,8 @@ function BadgeCard({ badge, lane, marked }: { badge: Badge; lane: string; marked
         <Text variant="monoMedium" numberOfLines={1} style={[styles.shrink, styles.tiny]}>{badge.name}</Text>
         <View style={styles.spacer} />
         {badge.unlocked ? (
-          <View style={[styles.unlocked, { backgroundColor: '#10b9811a' }]}>
-            <Check size={12} color="#059669" strokeWidth={2.5} />
+          <View style={[styles.unlocked, { backgroundColor: theme.successSoft }]}>
+            <Check size={12} color={theme.success} strokeWidth={2.5} />
           </View>
         ) : (
           <Text variant="monoMedium" muted style={styles.tiny11}>{progress}/{target}</Text>

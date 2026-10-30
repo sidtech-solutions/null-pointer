@@ -70,7 +70,7 @@ function Node({ node, lane, user, avatarSize, onPress }: { node: RailNode; lane:
       const size = avatarSize;
 
       return (
-        <Pressable onPress={onPress} disabled={!onPress} accessibilityLabel={user ? `${user.name || user.handle}'s profile` : undefined} style={{ position: 'absolute', top: center - size / 2, left: Space.rail / 2 - size / 2 }}>
+        <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={user ? `${user.name || user.handle}'s profile` : undefined} style={{ position: 'absolute', top: center - size / 2, left: Space.rail / 2 - size / 2 }}>
           {user ? <Avatar user={user} lane={lane} size={size - 8} /> : null}
         </Pressable>
       );
@@ -78,7 +78,7 @@ function Node({ node, lane, user, avatarSize, onPress }: { node: RailNode; lane:
     case 'dot':
     case 'root':
       return (
-        <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', top: node === 'dot' ? center - 18 : center - 9, left: Space.rail / 2 - 9 }}>
+        <Pressable onPress={onPress} disabled={!onPress} hitSlop={13} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={onPress && user ? `${user.name || user.handle}'s profile` : undefined} style={{ position: 'absolute', top: node === 'dot' ? center - 18 : center - 9, left: Space.rail / 2 - 9 }}>
           <RailDot lane={lane} hollow={node === 'root'} />
         </Pressable>
       );

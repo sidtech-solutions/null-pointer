@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Building2, ChevronLeft, Link as LinkIcon, MapPin, Terminal } from 'lucide-react-native';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
@@ -22,6 +23,7 @@ import { useCommitHandlers } from '@/lib/use-commit-handlers';
 /** A GitHub organization that commits mention: who it is, and every commit that mentions it, as the web's page shows. */
 export default function OrganizationScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const account = useAccount();
   const handlers = useCommitHandlers();
@@ -116,6 +118,7 @@ export default function OrganizationScreen() {
         viewerId={account.user?.id}
         handlers={handlers}
         ListHeaderComponent={header}
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
         onEndReached={() => {
           if (mentions.hasNextPage && !mentions.isFetchingNextPage) {
             mentions.fetchNextPage();

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
@@ -19,6 +20,7 @@ import { useOutbox } from '@/lib/use-outbox';
 /** What is waiting to be committed: push it now, try a refused one again, or drop it. */
 export default function OutboxScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const now = useNow();
@@ -55,7 +57,7 @@ export default function OutboxScreen() {
           </View>
         }
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, items.length === 0 && { paddingBottom: insets.bottom + Space.gutter }]}>
         <Text variant="small" muted>Commits written without a connection wait here and go out, oldest first, as soon as dev-null.sh can be reached. One devnull refuses stays here with its reason.</Text>
 
         {items.length === 0 ? (
@@ -79,7 +81,7 @@ export default function OutboxScreen() {
         )}
       </ScrollView>
       {items.length > 0 && (
-        <View style={[styles.footer, { borderTopColor: theme.hairline, backgroundColor: theme.surface }]}>
+        <View style={[styles.footer, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: Math.max(insets.bottom, Space.gutter) }]}>
           <Button title={online ? 'Push now' : 'Offline'} disabled={!online} busy={pushing} onPress={pushNow} />
         </View>
       )}

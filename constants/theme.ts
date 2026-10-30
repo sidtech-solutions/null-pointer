@@ -18,6 +18,18 @@ export type Tokens = {
   primarySoft: string;
   primaryInk: string;
   destructive: string;
+  /** A tint of `destructive` for chips and verdict pills, as `primarySoft` is to `primary`. */
+  destructiveSoft: string;
+  /** Amber for "nearly out": the character counter, a quota about to run dry. */
+  warning: string;
+  /** Green for "done": an unlocked badge, a delivered message. */
+  success: string;
+  successSoft: string;
+  /** The red LIVE pill and the ink on it; the same in both themes, as on the web. */
+  live: string;
+  liveInk: string;
+  /** Behind every bottom sheet. Lighter in the dark theme so the sheet still reads as raised. */
+  scrim: string;
   /** The dev/null brand red, for type names in highlighted code as on the web. */
   brand: string;
   lanes: readonly [string, string, string, string, string, string];
@@ -38,6 +50,13 @@ export const light: Tokens = {
   primarySoft: '#e8effc',
   primaryInk: '#ffffff',
   destructive: '#c92a2a',
+  destructiveSoft: '#fbe9e9',
+  warning: '#b45309',
+  success: '#2f9e44',
+  successSoft: '#e6f4ea',
+  live: '#e5484d',
+  liveInk: '#ffffff',
+  scrim: 'rgba(0, 0, 0, 0.45)',
   brand: '#ff2d20',
   lanes: ['#d9480f', '#2f9e44', '#9c36b5', '#0c8599', '#c2255c', '#b7791f'],
 };
@@ -57,6 +76,13 @@ export const dark: Tokens = {
   primarySoft: '#18233a',
   primaryInk: '#111112',
   destructive: '#ff6b6b',
+  destructiveSoft: '#3a1f1f',
+  warning: '#f2a93b',
+  success: '#51cf66',
+  successSoft: '#1b2e20',
+  live: '#e5484d',
+  liveInk: '#ffffff',
+  scrim: 'rgba(0, 0, 0, 0.6)',
   brand: '#ff2d20',
   lanes: ['#ff8a4c', '#51cf66', '#da77f2', '#3bc9db', '#f06595', '#fcc419'],
 };
@@ -68,7 +94,11 @@ export const Fonts = {
   monoMedium: 'GeistMono-Medium',
 } as const;
 
-export const Radius = { sm: 4, md: 6, lg: 8, full: 9999 } as const;
+/**
+ * The corner scale. Inputs and chips `sm`, buttons `md`, cards and quoted
+ * blocks `lg`, bottom sheets and the share card `xl`, discs and pills `full`.
+ */
+export const Radius = { sm: 4, md: 6, lg: 8, xl: 16, full: 9999 } as const;
 
 /** Points. */
 export const Space = {

@@ -1,13 +1,13 @@
 import { ChevronDown, ChevronRight, Ellipsis, MessageSquareReply, Quote, Star } from 'lucide-react-native';
 import { Image } from 'expo-image';
-import { type ReactNode, useState } from 'react';
-import { ActionSheetIOS, Alert, Modal, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { ReactNode } from 'react';
+import { Alert, Platform, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/text';
-import { useTheme } from '@/constants/theme';
+import { Radius, useTheme } from '@/constants/theme';
 import { baseUrl } from '@/lib/client';
-import { count } from '@/lib/display';
+import { compact as compactCount, count } from '@/lib/display';
+import { showOptions } from '@/lib/options';
 import type { Commit, User } from '@/lib/types';
 
 export type CommitHandlers = {
@@ -79,9 +79,6 @@ export function CommitActions({
   handlers: CommitHandlers;
 }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  // Android's Alert shows three buttons at most, so More opens a sheet of its own there.
-  const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const isOwn = viewerId !== undefined && String(commit.author?.id) === String(viewerId);
   const isApproved = commit.status === 'approved' || commit.status === '';
   const pasteis = handlers.pasteisLeft ?? null;
@@ -114,31 +111,8 @@ export function CommitActions({
     const canTranslate = isApproved && commit.body.trim() !== '' && Boolean(handlers.onTranslate) && !(commit.translated && commit.translation?.translated);
     const translate = () => handlers.onTranslate?.(commit);
 
-    if (Platform.OS === 'ios') {
-      const options = ['Share link', ...(canCard ? ['Share as image'] : []), ...(canTranslate ? ['Translate'] : []), ...(canPin ? [pinLabel] : []), ...(canReport ? ['Report commit'] : []), ...(isOwn ? ['Delete'] : []), 'Cancel'];
-
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: options.length - 1, destructiveButtonIndex: isOwn ? options.length - 2 : undefined }, (index) => {
-        const picked = options[index];
-
-        if (picked === 'Share link') {
-          share();
-        } else if (picked === 'Share as image') {
-          card();
-        } else if (picked === 'Translate') {
-          translate();
-        } else if (picked === pinLabel) {
-          togglePin();
-        } else if (picked === 'Report commit') {
-          report();
-        } else if (picked === 'Delete') {
-          remove();
-        }
-      });
-
-      return;
-    }
-
-    setMenu([
+    // The system sheet on iOS, the app's own on Android; one list of choices feeds both.
+    showOptions(commit.short_hash || '', [
       { label: 'Share link', run: share },
       ...(canCard ? [{ label: 'Share as image', run: card }] : []),
       ...(canTranslate ? [{ label: 'Translate', run: translate }] : []),
@@ -154,7 +128,7 @@ export function CommitActions({
         <Action onPress={() => handlers.onStar?.(commit)} label={commit.starred ? 'Unstar commit' : 'Star commit'}>
           <Star size={iconSize} color={commit.starred ? theme.primary : theme.inkMuted} fill={commit.starred ? theme.primary : 'transparent'} strokeWidth={2} />
           {commit.stars_count > 0 && (
-            <Text variant="mono" color={commit.starred ? theme.primary : theme.inkMuted} style={labelStyle}>{commit.stars_count}</Text>
+            <Text variant="mono" color={commit.starred ? theme.primary : theme.inkMuted} style={labelStyle}>{compactCount(commit.stars_count)}</Text>
           )}
         </Action>
       )}
@@ -162,7 +136,7 @@ export function CommitActions({
       {pasteis !== null && (
         <Action onPress={canGivePastel ? () => handlers.onPastel?.(commit) : undefined} label={canGivePastel ? `Give a pastel, ${pastelCount} given, ${pasteis} left today` : `${pastelCount} pastéis`}>
           <Image source={require('../assets/images/pastel-de-nata.png')} style={{ width: compact ? 18 : 20, height: compact ? 18 : 20 }} contentFit="contain" />
-          <Text variant="mono" muted style={labelStyle}>{pastelCount}</Text>
+          <Text variant="mono" muted style={labelStyle}>{compactCount(pastelCount)}</Text>
         </Action>
       )}
 
@@ -189,49 +163,18 @@ export function CommitActions({
       <Action onPress={more} label="More" centered>
         <Ellipsis size={iconSize} color={theme.inkMuted} strokeWidth={2} />
       </Action>
-
-      {Platform.OS !== 'ios' && (
-        <Modal visible={menu !== null} transparent animationType="fade" onRequestClose={() => setMenu(null)} statusBarTranslucent>
-          <Pressable onPress={() => setMenu(null)} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
-            <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
-              <Text variant="mono" muted style={styles.sheetTitle}>{commit.short_hash || ''}</Text>
-              {(menu ?? []).map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={() => {
-                    setMenu(null);
-                    item.run();
-                  }}
-                  style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: theme.wash }]}
-                  accessibilityRole="button">
-                  <Text color={item.destructive ? theme.destructive : theme.ink}>{item.label}</Text>
-                </Pressable>
-              ))}
-              <Pressable onPress={() => setMenu(null)} style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
-                <Text muted>Cancel</Text>
-              </Pressable>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
     </View>
   );
 }
-
-type MenuItem = { label: string; run: () => void; destructive?: boolean };
 
 const styles = StyleSheet.create({
   // Pulled left so the first icon lines up with the text above, and up into
   // the gap so the row reads as tight as before while the targets stay 44pt.
   row: { flexDirection: 'row', alignItems: 'center', marginLeft: -12, marginTop: -8, marginBottom: -6, gap: 4 },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 8 },
-  sheetTitle: { paddingHorizontal: 20, paddingVertical: 8 },
-  sheetRow: { paddingHorizontal: 20, paddingVertical: 14 },
-  action: { flexDirection: 'row', alignItems: 'center', minWidth: 48, height: ActionHeight, paddingHorizontal: 12, gap: 6, borderRadius: 22 },
+  action: { flexDirection: 'row', alignItems: 'center', minWidth: 48, height: ActionHeight, paddingHorizontal: 12, gap: 6, borderRadius: Radius.full },
   centered: { justifyContent: 'center' },
   pressed: { opacity: 0.45 },
-  label: { fontSize: 13, lineHeight: 18 },
-  compactLabel: { fontSize: 12, lineHeight: 16 },
+  label: { fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  compactLabel: { fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
   spacer: { flex: 1 },
 });

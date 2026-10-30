@@ -1,9 +1,9 @@
 import { X } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { Sheet } from '@/components/sheet';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { dayName, firstSlot, MaxScheduleDays, MinuteStep, scheduleLabel, scheduleProblem } from '@/lib/schedule';
@@ -17,9 +17,16 @@ const ChipStep = 50;
  */
 export function SchedulePicker({ visible, value, onPick, onClear, onClose }: { visible: boolean; value: Date | null; onPick: (date: Date) => void; onClear?: () => void; onClose: () => void }) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const now = useMemo(() => new Date(), [visible]); // eslint-disable-line react-hooks/exhaustive-deps
   const [picked, setPicked] = useState<Date>(() => value ?? firstSlot(now));
+
+  // Opened again later, the sheet starts from the current pick or the next slot, not whatever it last showed.
+  useEffect(() => {
+    if (visible) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPicked(value ?? firstSlot(new Date()));
+    }
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const days = useMemo(() => Array.from({ length: MaxScheduleDays + 1 }, (_, offset) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)), [now]);
   const hours = Array.from({ length: 24 }, (_, hour) => hour);
@@ -30,12 +37,10 @@ export function SchedulePicker({ visible, value, onPick, onClear, onClose }: { v
   const change = (day: Date = picked, hour: number = picked.getHours(), minute: number = picked.getMinutes()) => setPicked(new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute));
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable onPress={onClose} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
-        <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <Sheet visible={visible} onClose={onClose} style={styles.sheet}>
           <View style={styles.head}>
             <Text variant="section" style={styles.grow}>Schedule</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
               <X size={20} color={theme.inkMuted} strokeWidth={2} />
             </Pressable>
           </View>
@@ -104,15 +109,12 @@ export function SchedulePicker({ visible, value, onPick, onClear, onClose }: { v
               style={styles.grow}
             />
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 16, paddingHorizontal: Space.gutter, gap: 6 },
+  sheet: { paddingTop: 16, paddingHorizontal: Space.gutter, gap: 6 },
   head: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   grow: { flex: 1 },
   label: { fontSize: 11, lineHeight: 14, marginTop: 6 },

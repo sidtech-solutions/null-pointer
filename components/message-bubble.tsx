@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { CornerUpLeft } from 'lucide-react-native';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { memo, useCallback, useEffect, useRef } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { viewerParams } from '@/lib/viewer';
 import { Avatar } from '@/components/avatar';
@@ -85,7 +87,7 @@ function LinkCard({ preview, width }: { preview: LinkPreview; width: number }) {
 
   return (
     <Pressable onPress={() => openLink(preview.url)} style={[styles.card, { width, borderColor: theme.hairline, backgroundColor: theme.surface }]} accessibilityRole="link">
-      {preview.image_url ? <Image source={{ uri: preview.image_url }} style={[styles.cardImage, { backgroundColor: theme.wash }]} contentFit="cover" cachePolicy="disk" transition={0} /> : null}
+      {preview.image_url ? <Image source={{ uri: preview.image_url }} recyclingKey={preview.image_url} style={[styles.cardImage, { backgroundColor: theme.wash }]} contentFit="cover" cachePolicy="disk" transition={0} /> : null}
       <View style={styles.cardText}>
         <Text variant="mono" muted numberOfLines={1} style={styles.tiny}>{preview.site_name || host}</Text>
         {preview.title ? <Text variant="label" numberOfLines={2}>{preview.title}</Text> : null}
@@ -110,46 +112,59 @@ const DoubleTapWithin = 300;
 const SwipeToReply = 56;
 const SwipeStart = 12;
 
-/** Slides the bubble as the finger drags it sideways, and calls back once it has gone far enough. */
-function useSwipeToReply(mine: boolean, onSwipe: (() => void) | undefined) {
-  const [offset] = useState(() => new Animated.Value(0));
+/**
+ * Slides the bubble as the finger drags it sideways, on the UI thread, and
+ * calls back once it has gone far enough. The offset is reset when the
+ * recycled row shows another message; Reduce Motion snaps instead of springing.
+ */
+function useSwipeToReply(mine: boolean, messageId: number | string, onSwipe: (() => void) | undefined) {
+  const offset = useSharedValue(0);
+  const fired = useSharedValue(false);
+  const velocity = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
   const latest = useRef(onSwipe);
-  const enabled = onSwipe !== undefined;
+  const direction = mine ? -1 : 1;
 
   useEffect(() => {
     latest.current = onSwipe;
   }, [onSwipe]);
 
-  // The responder is built once per direction and reads the latest callback
-  // through the ref. Its callbacks run on touches, never during render, which
-  // the hooks lint cannot see from here.
-  /* eslint-disable react-hooks/refs, react-hooks/immutability */
-  const responder = useMemo(() => {
-    const direction = mine ? -1 : 1;
-    let fired = false;
+  useEffect(() => {
+    offset.set(0);
+    fired.set(false);
+  }, [messageId, offset, fired]);
 
-    return PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gesture) => latest.current !== undefined && gesture.dx * direction > SwipeStart && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2,
-      onPanResponderGrant: () => {
-        fired = false;
-      },
-      onPanResponderMove: (_event, gesture) => {
-        const along = Math.max(0, gesture.dx * direction);
-        offset.setValue(Math.min(along, SwipeToReply + (along - SwipeToReply) / 4) * direction);
+  const fire = useCallback(() => latest.current?.(), []);
 
-        if (!fired && along >= SwipeToReply) {
-          fired = true;
-          latest.current?.();
-        }
-      },
-      onPanResponderRelease: () => Animated.spring(offset, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start(),
-      onPanResponderTerminate: () => Animated.spring(offset, { toValue: 0, useNativeDriver: true }).start(),
-      onPanResponderTerminationRequest: () => true,
-    });
-  }, [mine, offset]);
-  /* eslint-enable react-hooks/refs, react-hooks/immutability */
+  const pan = usePanGesture({
+    enabled: onSwipe !== undefined,
+    // Only a clearly sideways drag toward the middle of the screen; the list keeps vertical scrolls.
+    activeOffsetX: SwipeStart * direction,
+    failOffsetY: [-8, 8],
+    onActivate: () => {
+      'worklet';
+      fired.set(false);
+    },
+    onUpdate: (event) => {
+      'worklet';
+      velocity.set(event.velocityX);
+      const along = Math.max(0, event.translationX * direction);
+      offset.set(Math.min(along, SwipeToReply + (along - SwipeToReply) / 4) * direction);
 
-  return { offset, handlers: enabled ? responder.panHandlers : {} };
+      if (!fired.get() && along >= SwipeToReply) {
+        fired.set(true);
+        runOnJS(fire)();
+      }
+    },
+    onFinalize: () => {
+      'worklet';
+      offset.set(reduceMotion ? 0 : withSpring(0, { damping: 18, stiffness: 220, velocity: velocity.get() }));
+    },
+  });
+
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
+
+  return { pan, style };
 }
 
 /**
@@ -183,7 +198,7 @@ export const MessageBubble = memo(function MessageBubble({
   const hasBody = message.body.trim() !== '';
   const hasMedia = (message.images?.length ?? 0) > 0;
   const lastTap = useRef(0);
-  const swipe = useSwipeToReply(mine, handlers.onSwipeReply ? () => handlers.onSwipeReply?.(message) : undefined);
+  const swipe = useSwipeToReply(mine, message.id, handlers.onSwipeReply ? () => handlers.onSwipeReply?.(message) : undefined);
 
   const tapped = () => {
     const now = Date.now();
@@ -197,7 +212,8 @@ export const MessageBubble = memo(function MessageBubble({
   };
 
   return (
-    <Animated.View style={[styles.wrap, mine ? styles.wrapMine : styles.wrapTheirs, { transform: [{ translateX: swipe.offset }] }]} {...swipe.handlers}>
+    <GestureDetector gesture={swipe.pan}>
+    <Animated.View style={[styles.wrap, mine ? styles.wrapMine : styles.wrapTheirs, swipe.style]}>
       {showsAuthor && !mine && author && (
         <Pressable onPress={handlers.onOpenAuthor ? () => handlers.onOpenAuthor?.(author) : undefined} style={styles.author} hitSlop={6}>
           <Avatar user={author} size={20} />
@@ -247,6 +263,7 @@ export const MessageBubble = memo(function MessageBubble({
         </View>
       )}
     </Animated.View>
+    </GestureDetector>
   );
 });
 

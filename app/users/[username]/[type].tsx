@@ -4,11 +4,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { EmptyState } from '@/components/empty-state';
 import { FollowButton } from '@/components/follow-button';
 import { Header } from '@/components/header';
+import { PersonSkeleton } from '@/components/person-skeleton';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
@@ -18,6 +20,7 @@ import type { Connection } from '@/lib/types';
 export default function ConnectionsScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const account = useAccount();
   const params = useLocalSearchParams<{ username: string; type: string }>();
   const type: 'followers' | 'following' = params.type === 'following' ? 'following' : 'followers';
@@ -47,8 +50,9 @@ export default function ConnectionsScreen() {
       <FlashList
         data={people}
         keyExtractor={(item: Connection) => String(item.user.id ?? item.user.handle)}
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.user.handle } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
+          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.user.handle } })} style={({ pressed }) => [styles.row, { borderBottomColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
             <Avatar user={item.user} size={40} lane={laneColor(theme, item.user.lane)} />
             <View style={styles.column}>
               <View style={styles.names}>
@@ -72,10 +76,14 @@ export default function ConnectionsScreen() {
         }}
         onEndReachedThreshold={0.6}
         ListEmptyComponent={
-          query.isPending ? null : query.isError ? (
+          query.isPending ? (
+            <PersonSkeleton />
+          ) : query.isError ? (
             <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
           ) : (
-            <EmptyState fatal={type === 'following' ? 'fatal: not following anyone' : 'fatal: no followers yet'} />
+            <EmptyState fatal={type === 'following' ? 'fatal: not following anyone' : 'fatal: no followers yet'}>
+              {type === 'following' ? 'Follow someone from their profile and they show up here.' : 'People who follow this account show up here.'}
+            </EmptyState>
           )
         }
       />

@@ -12,7 +12,7 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ title: 'Not found' }} />
       <View style={[styles.screen, { backgroundColor: theme.shell }]}>
         <EmptyState fatal="fatal: path does not exist in 'HEAD'">This screen doesn’t exist.</EmptyState>
-        <Link href="/" style={{ color: theme.primary, textAlign: 'center' }}>
+        <Link href="/(tabs)" replace style={{ color: theme.primary, textAlign: 'center' }}>
           Back to your log
         </Link>
       </View>

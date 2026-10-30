@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Check, ChevronLeft, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
 import { SettingsHeading } from '@/components/settings-heading';
+import { Sheet } from '@/components/sheet';
 import { Text } from '@/components/text';
 import { Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
@@ -85,7 +86,7 @@ export default function LanguageScreen() {
           </View>
         }
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.gutterWide }]}>
         {settings.isPending && (
           <View style={styles.loading}>
             <ActivityIndicator color={theme.inkMuted} />
@@ -136,12 +137,10 @@ export default function LanguageScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={choosing} transparent animationType="fade" onRequestClose={() => setChoosing(false)} statusBarTranslucent>
-        <Pressable onPress={() => setChoosing(false)} style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close">
-          <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: theme.surface, borderColor: theme.hairline, paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <Sheet visible={choosing} onClose={() => setChoosing(false)} style={styles.sheet}>
             <View style={styles.sheetHead}>
               <Text variant="section" style={styles.grow}>Translate into</Text>
-              <Pressable onPress={() => setChoosing(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+              <Pressable onPress={() => setChoosing(false)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
                 <X size={20} color={theme.inkMuted} strokeWidth={2} />
               </Pressable>
             </View>
@@ -175,9 +174,7 @@ export default function LanguageScreen() {
               })}
               {shown.length === 0 && <Text variant="small" muted style={styles.none}>No language matches &ldquo;{search.trim()}&rdquo;.</Text>}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </Sheet>
     </View>
   );
 }
@@ -187,7 +184,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
   back: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 16 },
-  content: { padding: Space.gutter, gap: 12, paddingBottom: 48 },
+  content: { padding: Space.gutter, gap: 12 },
   loading: { paddingVertical: 32, alignItems: 'center' },
   section: { padding: Space.gutter, gap: 12, borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth },
   field: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderRadius: Radius.lg },
@@ -196,8 +193,7 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   link: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderRadius: Radius.lg },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { maxHeight: '80%', borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingTop: 16, paddingHorizontal: Space.gutter, gap: 10 },
+  sheet: { paddingTop: 16, paddingHorizontal: Space.gutter, gap: 10 },
   sheetHead: { flexDirection: 'row', alignItems: 'center' },
   grow: { flex: 1 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: 12, borderRadius: Radius.lg },

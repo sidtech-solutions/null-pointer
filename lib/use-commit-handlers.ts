@@ -7,7 +7,7 @@ import type { CommitHandlers } from '@/components/commit-actions';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
 import { patchCommit, removeCommit } from '@/lib/commit-cache';
 import { shortHash } from '@/lib/display';
-import { tap } from '@/lib/haptics';
+import { notify, tap } from '@/lib/haptics';
 import { reportCommit } from '@/lib/report-store';
 import { toast } from '@/lib/toast';
 import { translationLanguage } from '@/lib/translation';
@@ -156,11 +156,12 @@ export function useCommitHandlers(): CommitHandlers {
 
   function failed(error: unknown) {
     if (error instanceof Unauthenticated) {
-      account.signOut().then(() => router.replace('/onboarding'));
+      account.signOut();
 
       return;
     }
 
+    notify('error');
     Alert.alert(error instanceof ApiError ? error.firstError() : 'fatal: something went wrong.');
   }
 
@@ -186,14 +187,14 @@ export function useCommitHandlers(): CommitHandlers {
       onShowOriginal: (commit) => patchCommit(queryClient, commit.id, (c) => ({ ...c, translated: false })),
       onOpenOrg: (handle) => router.push({ pathname: '/orgs/[handle]', params: { handle } }),
       onPastel: (commit) => {
-        tap();
-
         if (pasteisLeft === 0) {
+          notify('warning');
           toast('you ran out of pastéis. wait until tomorrow.');
 
           return;
         }
 
+        tap();
         pastel.mutate(commit);
       },
       pasteisLeft,

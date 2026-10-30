@@ -11,7 +11,7 @@ export function EmptyState({ fatal, children, action, onAction }: { fatal: strin
       <Text variant="mono" muted style={styles.center}>{fatal}</Text>
       {children && <Text style={styles.center}>{children}</Text>}
       {action && (
-        <Pressable onPress={onAction} hitSlop={8}>
+        <Pressable onPress={onAction} hitSlop={12} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
           <Text color={theme.primary} style={styles.center}>{action}</Text>
         </Pressable>
       )}
@@ -22,4 +22,5 @@ export function EmptyState({ fatal, children, action, onAction }: { fatal: strin
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 8, maxWidth: 384, alignSelf: 'center' },
   center: { textAlign: 'center' },
+  pressed: { opacity: 0.6 },
 });

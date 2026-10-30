@@ -123,7 +123,7 @@ export function LogPage({ log, active, onTrending, ref }: { log: LogName; active
 
   useEffect(() => {
     if (query.error instanceof Unauthenticated) {
-      account.signOut().then(() => router.replace('/onboarding'));
+      account.signOut();
     }
   }, [query.error, account, router]);
 

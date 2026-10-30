@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, KeyRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
@@ -20,6 +21,7 @@ import type { Device } from '@/lib/types';
 /** Every key approved to sign as the user, as the web's Devices page lists them, and a way to revoke one. */
 export default function DevicesScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const account = useAccount();
   const queryClient = useQueryClient();
@@ -39,7 +41,6 @@ export default function DevicesScreen() {
         // The server no longer takes this phone's key; the app follows.
         await forgetKey();
         await account.signOut();
-        router.replace('/onboarding');
 
         return;
       }
@@ -70,7 +71,9 @@ export default function DevicesScreen() {
           </View>
         }
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.gutterWide }]} refreshControl={<RefreshControl refreshing={devices.isFetching && !devices.isPending} onRefresh={() => {
+              devices.refetch();
+            }} tintColor={theme.inkMuted} />}>
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.hairline }]}>
           <SettingsHeading title="Approved keys" description="Each phone, computer and CLI you signed in from has its own SSH key. Revoke one you no longer use or recognise." />
 
@@ -122,7 +125,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
   back: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 16 },
-  content: { padding: Space.gutter, gap: 12, paddingBottom: 48 },
+  content: { padding: Space.gutter, gap: 12 },
   section: { padding: Space.gutter, gap: 12, borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth },
   loading: { paddingVertical: 24, alignItems: 'center' },
   device: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },

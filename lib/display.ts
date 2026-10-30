@@ -18,7 +18,23 @@ export function fits(body: string): boolean {
 }
 
 export function count(value: number, singular: string, plural: string): string {
-  return `${value} ${value === 1 ? singular : plural}`;
+  return `${compact(value)} ${value === 1 ? singular : plural}`;
+}
+
+/** 999 stays 999; 1.4k, 38k, 1.2M above that, trailing zeros trimmed, as a product shows a count. */
+export function compact(value: number): string {
+  const abs = Math.abs(value);
+
+  if (abs < 1000) {
+    return String(value);
+  }
+
+  const unit = abs < 1_000_000 ? 'k' : 'M';
+  const scaled = abs / (unit === 'k' ? 1000 : 1_000_000);
+  const digits = scaled < 10 ? 1 : 0;
+  const text = scaled.toFixed(digits).replace(/\.0$/, '');
+
+  return `${value < 0 ? '-' : ''}${text}${unit}`;
 }
 
 const Months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

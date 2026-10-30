@@ -87,8 +87,8 @@ export const ConversationRow = memo(function ConversationRow({
           {mineLast && (pulled ? <CheckCheck size={14} color={theme.primary} strokeWidth={2} /> : <Check size={14} color={theme.inkMuted} strokeWidth={2} />)}
           <Text variant="small" muted={!unread} numberOfLines={1} style={styles.preview}>{preview}</Text>
           {unread && (
-            <View style={[styles.ahead, { backgroundColor: muted ? theme.rail : theme.primary }]} accessibilityLabel={`${conversation.ahead} unread`}>
-              <Text variant="mono" color={theme.primaryInk} style={styles.aheadText}>{conversation.ahead > 99 ? '99+' : conversation.ahead}</Text>
+            <View style={[styles.ahead, { backgroundColor: muted ? theme.wash : theme.primary }]} accessibilityLabel={`${conversation.ahead} unread`}>
+              <Text variant="mono" color={muted ? theme.inkMuted : theme.primaryInk} style={styles.aheadText}>{conversation.ahead > 99 ? '99+' : conversation.ahead}</Text>
             </View>
           )}
         </View>

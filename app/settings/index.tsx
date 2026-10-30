@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { ArrowUpRight, ChevronLeft, ChevronRight, RefreshCw, Smartphone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Image } from 'expo-image';
 
@@ -33,6 +34,7 @@ type Choice = 'auto' | number | string;
 
 export default function SettingsScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const account = useAccount();
@@ -89,13 +91,17 @@ export default function SettingsScreen() {
 
   const remotes = me.data?.remotes ?? null;
 
+  // The switch flips under the thumb; the server's answer replaces the guess, or the guess is undone.
+  const [remotesGuess, setRemotesGuess] = useState<boolean | null>(null);
   const remotesSwitch = useMutation({
     mutationFn: (enabled: boolean) => api.setRemotes(enabled),
+    onMutate: (enabled) => setRemotesGuess(enabled),
     onSuccess: (fresh) => {
       queryClient.setQueryData(['me'], fresh);
       queryClient.invalidateQueries({ queryKey: ['remotes'] });
     },
     onError: (error) => failed(error, 'fatal: could not change Remotes.'),
+    onSettled: () => setRemotesGuess(null),
   });
 
   const remotePreferences = useMutation({
@@ -122,7 +128,6 @@ export default function SettingsScreen() {
         onPress: async () => {
           await forgetKey();
           await account.signOut();
-          router.replace('/onboarding');
         },
       },
     ]);
@@ -138,7 +143,6 @@ export default function SettingsScreen() {
             await api.deleteAccount();
             await forgetKey();
             await account.signOut();
-            router.replace('/onboarding');
           } catch (error) {
             failed(error, 'fatal: could not delete the account.');
           }
@@ -170,7 +174,7 @@ export default function SettingsScreen() {
           </View>
         }
       />
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Space.gutterWide }]}>
         <Section>
           <SettingsHeading title="Profile information" description="Mirrored from GitHub when you sign in. To change any of it, change it on GitHub, then sync it here." />
           {user && (
@@ -231,7 +235,7 @@ export default function SettingsScreen() {
             <HslSlider label="saturation" value={mixed.s} stops={[hslToHex({ ...mixed, s: 0 }), hslToHex({ ...mixed, s: 1 })]} onChange={(value) => mix({ s: value })} />
             <HslSlider label="lightness" value={mixed.l} stops={['#000000', hslToHex({ ...mixed, l: 0.5 }), '#ffffff']} onChange={(value) => mix({ l: value })} />
           </View>
-          <Button title="Save color" disabled={!changed} busy={saveLane.isPending} onPress={() => saveLane.mutate()} style={[styles.save, changed && { backgroundColor: previewColor }]} />
+          <Button title="Save color" disabled={!changed} busy={saveLane.isPending} onPress={() => saveLane.mutate()} style={styles.save} />
         </Section>
 
         <Section>
@@ -261,7 +265,7 @@ export default function SettingsScreen() {
               <Text variant="section">Remotes</Text>
               <Text variant="small" muted>Push messages to people and take theirs. While off, nobody can push to you and your conversations wait for you to come back.</Text>
             </View>
-            <Switch value={remotes !== null} onValueChange={(value) => remotesSwitch.mutate(value)} trackColor={{ true: theme.primary }} disabled={!me.data || remotesSwitch.isPending} accessibilityLabel="Remotes" />
+            <Switch value={remotesGuess ?? remotes !== null} onValueChange={(value) => remotesSwitch.mutate(value)} trackColor={{ true: theme.primary }} disabled={!me.data} accessibilityLabel="Remotes" />
           </View>
           {remotes && (
             <>
@@ -413,7 +417,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: -8 },
   back: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 16 },
-  content: { padding: Space.gutter, gap: 12, paddingBottom: 48 },
+  content: { padding: Space.gutter, gap: 12 },
   section: { padding: Space.gutter, gap: 12, borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   shrink: { flexShrink: 1, flex: 1 },

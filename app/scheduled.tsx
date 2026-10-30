@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft, Clock } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { CommitBody } from '@/components/commit-body';
@@ -29,6 +30,7 @@ const StatusLabel: Record<ScheduledStatus, string> = {
 /** The queue only the user sees: what waits, when, and what became of what already went. */
 export default function ScheduledScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -92,6 +94,7 @@ export default function ScheduledScreen() {
       <FlashList
         data={rows}
         keyExtractor={(row) => row.id}
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
         renderItem={({ item }) => {
           const waiting = item.status === 'scheduled';
           const busy = (submit.isPending && submit.variables?.id === item.id) || (cancel.isPending && cancel.variables?.id === item.id);

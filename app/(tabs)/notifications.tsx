@@ -8,6 +8,8 @@ import PagerView from 'react-native-pager-view';
 import { DayMarker } from '@/components/day-marker';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
+import { NotificationSkeleton } from '@/components/notification-skeleton';
+import { RefreshFailed } from '@/components/refresh-failed';
 import { commitToOpen, NotificationRow } from '@/components/notification-row';
 import { RootRow } from '@/components/root-row';
 import { Text } from '@/components/text';
@@ -16,7 +18,7 @@ import { useAccount } from '@/lib/account';
 import { api, nextCursor, Unauthenticated } from '@/lib/client';
 import { dayKey, dayLabel } from '@/lib/display';
 import { useNow } from '@/lib/now';
-import type { CurrentUser, Notification } from '@/lib/types';
+import type { CurrentUser, Notification, User } from '@/lib/types';
 
 const Types: { key: string; label: string; empty: string }[] = [
   { key: 'all', label: 'All', empty: 'Nothing here yet. Follows, stars, replies, quotes, mentions, and moderation updates for your commits will show up here.' },
@@ -127,7 +129,7 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
 
   useEffect(() => {
     if (query.error instanceof Unauthenticated) {
-      account.signOut().then(() => router.replace('/onboarding'));
+      account.signOut();
     }
   }, [query.error, account, router]);
 
@@ -142,7 +144,8 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
 
       if (day !== null && day !== previousDay) {
         const label = dayLabel(notification.created_at!, now);
-        out.push({ type: 'day', key: `day-${label}-${notification.id}`, label });
+        // Keyed by the date, not the label: "Today" turning into "Yesterday" at midnight must not remount the row.
+        out.push({ type: 'day', key: `day-${day}`, label });
         previousDay = day;
         out.push({ type: 'notification', key: notification.id, notification, hasPrevious: false });
       } else {
@@ -169,9 +172,17 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
     return !Number.isNaN(read) && read >= since - 60_000;
   }, []);
 
+  // The callbacks read the open groups through a ref, so they stay the same
+  // function across toggles and memo(NotificationRow) keeps bailing out.
+  const openRef = useRef(open);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   const loadGroup = useCallback(
     async (notification: Notification, older = false) => {
-      const current = open[notification.id];
+      const current = openRef.current[notification.id];
       const cursor = older ? (current?.cursor ?? null) : null;
 
       try {
@@ -186,12 +197,12 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
         setOpen((state) => ({ ...state, [notification.id]: { items: state[notification.id]?.items ?? [], hasMore: false, cursor: null, failed: true } }));
       }
     },
-    [open, type],
+    [type],
   );
 
   const toggleGroup = useCallback(
     (notification: Notification) => {
-      if (notification.id in open) {
+      if (notification.id in openRef.current) {
         setOpen((state) => {
           const next = { ...state };
           delete next[notification.id];
@@ -205,8 +216,11 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
       setOpen((state) => ({ ...state, [notification.id]: null }));
       loadGroup(notification);
     },
-    [open, loadGroup],
+    [loadGroup],
   );
+
+  const loadOlder = useCallback((notification: Notification) => loadGroup(notification, true), [loadGroup]);
+  const openActor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }), [router]);
 
   const openNotification = useCallback(
     (notification: Notification) => {
@@ -250,8 +264,8 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
             onPress={openNotification}
             onToggleGroup={toggleGroup}
             onOpenItem={openNotification}
-            onLoadOlder={(notification) => loadGroup(notification, true)}
-            onOpenActor={(user) => router.push({ pathname: '/users/[username]', params: { username: user.handle } })}
+            onLoadOlder={loadOlder}
+            onOpenActor={openActor}
           />
         )
       }
@@ -262,8 +276,11 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
       }}
       onEndReachedThreshold={0.6}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.inkMuted} />}
+      ListHeaderComponent={query.isError && notifications.length > 0 ? <RefreshFailed onRetry={() => query.refetch()} /> : null}
       ListEmptyComponent={
-        query.isPending ? null : query.isError ? (
+        query.isPending ? (
+          <NotificationSkeleton />
+        ) : query.isError ? (
           <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
         ) : (
           <EmptyState fatal={type === 'all' ? '$ cat /dev/notifications' : `$ cat /dev/notifications | grep ${type}`} action={type === 'all' ? undefined : 'All notifications'} onAction={onShowAll}>
@@ -271,7 +288,7 @@ function NotificationsPage({ type, empty, active, onShowAll }: { type: string; e
           </EmptyState>
         )
       }
-      ListFooterComponent={notifications.length > 0 && !query.hasNextPage ? <RootRow>That’s the oldest notification. There’s nothing before it.</RootRow> : null}
+      ListFooterComponent={query.isFetchingNextPage ? <NotificationSkeleton count={1} /> : notifications.length > 0 && !query.hasNextPage ? <RootRow>That’s the oldest notification. There’s nothing before it.</RootRow> : null}
     />
   );
 }
@@ -280,7 +297,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   filters: { borderBottomWidth: StyleSheet.hairlineWidth },
   filterRow: { paddingHorizontal: Space.gutter - 8 },
-  filter: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 12, gap: 8 },
+  filter: { alignItems: 'center', paddingTop: 13, paddingHorizontal: 12, gap: 8 },
   underline: { height: 3, alignSelf: 'stretch', borderTopLeftRadius: 2, borderTopRightRadius: 2 },
   pager: { flex: 1 },
   page: { flex: 1 },

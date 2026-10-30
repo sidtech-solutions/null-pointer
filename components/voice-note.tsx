@@ -2,6 +2,7 @@ import { type AudioPlayer, type AudioStatus, createAudioPlayer, setAudioModeAsyn
 import { Pause, Play, Square, Trash2, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { Text } from '@/components/text';
 import { Radius, useTheme } from '@/constants/theme';
@@ -169,16 +170,22 @@ export function VoiceNote({ voice, tint, compact = false }: { voice: MessageVoic
 export function RecordingBar({ durationMs, peak, stopping, onCancel, onStop }: { durationMs: number; peak: () => number; stopping: boolean; onCancel: () => void; onStop: () => void }) {
   const theme = useTheme();
   const [recent, setRecent] = useState<number[]>([]);
-  const [blink, setBlink] = useState(true);
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(1);
 
+  // The waveform samples the microphone ten times a second; that is data, not motion, so it stays on a timer.
   useEffect(() => {
-    const timer = setInterval(() => {
-      setRecent((current) => [...current.slice(-23), peak()]);
-      setBlink((current) => !current);
-    }, 100);
+    const timer = setInterval(() => setRecent((current) => [...current.slice(-23), peak()]), 100);
 
     return () => clearInterval(timer);
   }, [peak]);
+
+  // The dot breathes on the UI thread; under Reduce Motion it simply stays lit.
+  useEffect(() => {
+    pulse.set(reduceMotion ? 1 : withRepeat(withTiming(0.3, { duration: 500 }), -1, true));
+  }, [pulse, reduceMotion]);
+
+  const dotStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
 
   const left = Math.max(0, VoiceLimits.maxMs - durationMs);
 
@@ -187,7 +194,7 @@ export function RecordingBar({ durationMs, peak, stopping, onCancel, onStop }: {
       <Pressable onPress={onCancel} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel recording" style={styles.recordingButton}>
         <X size={20} color={theme.inkMuted} strokeWidth={2} />
       </Pressable>
-      <View style={[styles.dot, { backgroundColor: theme.destructive, opacity: blink ? 1 : 0.3 }]} />
+      <Animated.View style={[styles.dot, { backgroundColor: theme.destructive }, dotStyle]} />
       <Text variant="mono" style={styles.clock}>{formatVoiceTime(durationMs)}</Text>
       <Waveform bars={waveformOf(recent, 24)} played={1} tint={theme.ink} height={22} style={styles.recent} />
       {left <= 10_000 && <Text variant="mono" muted style={styles.left}>-{formatVoiceTime(left)}</Text>}

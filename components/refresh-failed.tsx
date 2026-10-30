@@ -7,7 +7,7 @@ export function RefreshFailed({ onRetry }: { onRetry: () => void }) {
   const theme = useTheme();
 
   return (
-    <Pressable onPress={onRetry} style={[styles.row, { backgroundColor: theme.surface, borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel="Couldn't refresh. Retry">
+    <Pressable onPress={onRetry} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.wash : theme.surface, borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel="Couldn't refresh. Retry">
       <Text variant="mono" muted style={styles.shrink}>warning: couldn’t refresh</Text>
       <View style={styles.spacer} />
       <Text variant="small" color={theme.primary}>Retry</Text>

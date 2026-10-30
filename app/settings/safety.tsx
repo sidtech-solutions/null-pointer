@@ -4,11 +4,13 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
 import { Header } from '@/components/header';
+import { PersonSkeleton } from '@/components/person-skeleton';
 import { Text } from '@/components/text';
 import { laneColor, Space, useTheme } from '@/constants/theme';
 import { api, ApiError, nextCursor } from '@/lib/client';
@@ -33,6 +35,7 @@ const Copy: Record<Kind, { label: string; description: string; undo: string; emp
 
 export default function SafetyScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [kind, setKind] = useState<Kind>('muted');
@@ -79,13 +82,14 @@ export default function SafetyScreen() {
       <FlashList
         data={people}
         keyExtractor={(user: User) => String(user.id ?? user.handle)}
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
         ListHeaderComponent={
           <View style={[styles.description, { borderBottomColor: theme.hairline }]}>
             <Text variant="small" muted>{Copy[kind].description}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.handle } })} style={[styles.row, { borderBottomColor: theme.hairline }]}>
+          <Pressable onPress={() => router.push({ pathname: '/users/[username]', params: { username: item.handle } })} style={({ pressed }) => [styles.row, { borderBottomColor: theme.hairline }, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
             <Avatar user={item} size={40} lane={laneColor(theme, item.lane)} />
             <View style={styles.column}>
               <Text variant="name" numberOfLines={1}>{item.name || item.handle}</Text>
@@ -100,7 +104,7 @@ export default function SafetyScreen() {
           }
         }}
         onEndReachedThreshold={0.6}
-        ListEmptyComponent={query.isPending ? null : query.isError ? <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} /> : <EmptyState fatal={Copy[kind].empty} />}
+        ListEmptyComponent={query.isPending ? <PersonSkeleton /> : query.isError ? <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} /> : <EmptyState fatal={Copy[kind].empty} />}
       />
     </View>
   );

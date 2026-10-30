@@ -28,7 +28,7 @@ export function OutboxBanner() {
         </View>
       )}
       {items.length > 0 && (
-        <Pressable onPress={() => router.push('/outbox')} style={[styles.row, { backgroundColor: theme.surface, borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`${items.length} in the outbox`}>
+        <Pressable onPress={() => router.push('/outbox')} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.wash : theme.surface, borderBottomColor: theme.hairline }]} accessibilityRole="button" accessibilityLabel={`${items.length} in the outbox`}>
           <Send size={14} color={failed > 0 ? theme.destructive : theme.primary} strokeWidth={2} />
           <Text variant="mono" muted style={styles.shrink} numberOfLines={1}>
             {items.length} {items.length === 1 ? 'commit' : 'commits'} {failed > 0 ? `in the outbox, ${failed} refused` : online ? 'pushing…' : 'waiting for a connection'}

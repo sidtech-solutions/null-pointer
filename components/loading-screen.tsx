@@ -12,7 +12,7 @@ export function LoadingScreen({ caption = 'git fetch…' }: { caption?: string }
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.shell }]} accessibilityRole="progressbar" accessibilityLabel="Loading">
-      <NullPointerMark width={96} />
+      <NullPointerMark width={120} />
       <Animated.View entering={FadeIn.delay(600).duration(300)} style={styles.caption}>
         <Text variant="mono" muted>{caption}</Text>
       </Animated.View>

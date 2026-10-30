@@ -14,9 +14,11 @@ export function Avatar({ user, size = 40, lane, dashed = false }: { user: Pick<U
   // Fetched at the drawn size, in device pixels, as the web does: a 40pt avatar needs no 460px JPEG.
   const uri = user.avatar_url ? sizedAvatarUrl(user.avatar_url, size * PixelRatio.get()) : null;
   // GitHub's avatar CDN can stall for seconds on a slow network; a load that gives up shows the initial instead of a hole.
-  const [failed, setFailed] = useState(false);
+  // Keyed to the URL: a recycled row showing someone else starts fresh.
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  const failed = failedUri !== null && failedUri === uri;
   const image = uri && !failed ? (
-    <Image source={{ uri }} style={{ width: size, height: size, borderRadius: Radius.full, backgroundColor: theme.wash }} cachePolicy="disk" transition={0} recyclingKey={uri} onError={() => setFailed(true)} />
+    <Image source={{ uri }} style={{ width: size, height: size, borderRadius: Radius.full, backgroundColor: theme.wash }} cachePolicy="disk" transition={0} recyclingKey={uri} onError={() => setFailedUri(uri)} />
   ) : (
     <View style={{ width: size, height: size, borderRadius: Radius.full, backgroundColor: theme.wash, alignItems: 'center', justifyContent: 'center' }}>
       <Text variant="name" muted>{initial}</Text>

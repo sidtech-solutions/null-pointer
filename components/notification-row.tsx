@@ -112,11 +112,11 @@ export const NotificationRow = memo(function NotificationRow({
   const rest = others(notification);
 
   return (
-    <Pressable onPress={() => onPress(notification)} style={[styles.row, { backgroundColor: theme.surface }]} accessibilityLabel={`${isNew ? 'New. ' : ''}${moderation ? '' : `${notification.actor?.name ?? ''} `}${sentence(notification)}`}>
+    <Pressable onPress={() => onPress(notification)} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.wash : theme.surface }]} accessibilityRole="button" accessibilityLabel={`${isNew ? 'New. ' : ''}${moderation ? '' : `${notification.actor?.name ?? ''} `}${sentence(notification)}`}>
       <View style={styles.content}>
         <View style={styles.head}>
           {moderation ? (
-            <View style={[styles.verdict, { backgroundColor: rejection ? `${theme.destructive}1a` : theme.wash }]}>
+            <View style={[styles.verdict, { backgroundColor: rejection ? theme.destructiveSoft : theme.wash }]}>
               <Text variant="mono" color={rejection ? theme.destructive : theme.inkMuted} style={styles.tiny}>{notification.type}</Text>
             </View>
           ) : (
@@ -142,10 +142,10 @@ export const NotificationRow = memo(function NotificationRow({
           <Text>{sentence(notification)}.</Text>
         ) : (
           <Text>
-            <Text variant="name" onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>{notification.actor?.name || notification.actor?.handle}</Text>{' '}
+            <Text variant="name" onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} accessibilityRole="link">{notification.actor?.name || notification.actor?.handle}</Text>{' '}
             {rest === '' ? (
               <>
-                <Text variant="mono" muted onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} suppressHighlighting>@{notification.actor?.handle}</Text> {sentence(notification)}
+                <Text variant="mono" muted onPress={onOpenActor && notification.actor ? () => onOpenActor(notification.actor) : undefined} accessibilityRole="link">@{notification.actor?.handle}</Text> {sentence(notification)}
               </>
             ) : (
               `${rest} ${sentence(notification)}`
@@ -176,7 +176,7 @@ export const NotificationRow = memo(function NotificationRow({
         )}
 
         {grouped && (
-          <Pressable onPress={() => onToggleGroup(notification)} style={styles.toggle} hitSlop={4} accessibilityRole="button" accessibilityLabel={open ? `Hide ${noun}` : `${notification.event_count} ${noun}`}>
+          <Pressable onPress={() => onToggleGroup(notification)} style={styles.toggle} hitSlop={8} accessibilityRole="button" accessibilityLabel={open ? `Hide ${noun}` : `${notification.event_count} ${noun}`}>
             {open ? <ChevronDown size={14} color={theme.primary} strokeWidth={2} /> : <ChevronRight size={14} color={theme.primary} strokeWidth={2} />}
             <Text variant="small" color={theme.primary} style={styles.toggleText}>{open ? `Hide ${noun}` : `${notification.event_count} ${noun}`}</Text>
           </Pressable>
@@ -185,13 +185,13 @@ export const NotificationRow = memo(function NotificationRow({
         {open && (
           <View style={styles.group}>
             {(group?.items ?? []).map((item) => (
-              <Pressable key={item.id} onPress={() => onOpenItem(item)} style={styles.item}>
+              <Pressable key={item.id} onPress={() => onOpenItem(item)} style={({ pressed }) => [styles.item, pressed && { backgroundColor: theme.wash }]} accessibilityRole="button">
                 <Pressable onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} hitSlop={4} accessibilityRole="button" accessibilityLabel={`@${item.actor?.handle ?? ''}`}>
                   <Avatar user={item.actor} size={28} />
                 </Pressable>
                 <View style={styles.itemColumn}>
                   <View style={styles.itemHead}>
-                    <Text variant="name" numberOfLines={1} style={styles.shrink} onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} suppressHighlighting>{item.actor?.name || item.actor?.handle}</Text>
+                    <Text variant="name" numberOfLines={1} style={styles.shrink} onPress={onOpenActor && item.actor ? () => onOpenActor(item.actor) : undefined} accessibilityRole="link">{item.actor?.name || item.actor?.handle}</Text>
                     <View style={styles.spacer} />
                     <Icon type={item.type} color={isModeration(item) ? theme.inkMuted : laneColor(theme, item.actor?.lane)} filled={item.type === 'starred'} />
                     <RelativeTime iso={item.created_at} />
@@ -204,7 +204,7 @@ export const NotificationRow = memo(function NotificationRow({
             {group?.failed && (
               <View style={styles.failed}>
                 <Text variant="mono" muted>fatal: could not load {noun}</Text>
-                <Pressable onPress={() => onLoadOlder(notification)} hitSlop={6}>
+                <Pressable onPress={() => onLoadOlder(notification)} hitSlop={12} accessibilityRole="button">
                   <Text variant="small" color={theme.primary}>Try again</Text>
                 </Pressable>
               </View>
@@ -215,7 +215,7 @@ export const NotificationRow = memo(function NotificationRow({
               </View>
             )}
             {group?.hasMore && (
-              <Pressable onPress={() => onLoadOlder(notification)} style={styles.older} hitSlop={4}>
+              <Pressable onPress={() => onLoadOlder(notification)} style={styles.older} hitSlop={8} accessibilityRole="button">
                 <Text variant="small" color={theme.primary} style={styles.toggleText}>Show older {noun}</Text>
               </Pressable>
             )}
@@ -247,15 +247,15 @@ const styles = StyleSheet.create({
   tiny: { fontSize: 12, lineHeight: 16 },
   yourCommit: { marginTop: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.lg, borderWidth: 1 },
   rejection: { marginTop: 4, gap: 4 },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, marginLeft: -2, paddingVertical: 2 },
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, marginLeft: -2, paddingVertical: 4, minHeight: 28 },
   toggleText: { fontSize: 13, lineHeight: 18 },
   group: { marginTop: 8 },
-  item: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, paddingLeft: 32 },
+  item: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, paddingLeft: 32, paddingRight: 8, borderRadius: Radius.lg, borderCurve: 'continuous' },
   itemColumn: { flex: 1, gap: 4 },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
   shrink: { flexShrink: 1 },
   failed: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingLeft: 32 },
-  older: { marginLeft: 24, marginTop: 4, paddingVertical: 2 },
+  older: { marginLeft: 24, marginTop: 4, paddingVertical: 4, minHeight: 28, justifyContent: 'center' },
   guide: { position: 'absolute', top: 0, bottom: 8, left: 14, width: 1 },
   hairline: { height: StyleSheet.hairlineWidth, marginLeft: Space.rail },
   railTop: { position: 'absolute', top: 0, left: Space.rail / 2 - 1, width: 2, height: 32 },

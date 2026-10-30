@@ -14,10 +14,13 @@ export function Button({
   size = 'md',
   busy = false,
   disabled,
+  accent,
   style,
   ...props
 }: Omit<PressableProps, 'style' | 'children'> & {
   title: string;
+  /** A fill other than `primary` (the person's lane) that still darkens under the thumb. */
+  accent?: string;
   variant?: Variant;
   size?: Size;
   busy?: boolean;
@@ -28,7 +31,7 @@ export function Button({
   const fill = (pressed: boolean): string => {
     switch (variant) {
       case 'primary':
-        return pressed ? theme.primaryHover : theme.primary;
+        return accent ? (pressed ? `${accent}cc` : accent) : pressed ? theme.primaryHover : theme.primary;
       case 'destructive':
         return theme.destructive;
       case 'outline':
@@ -62,5 +65,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
     borderRadius: Radius.md,
+    borderCurve: 'continuous',
   },
 });

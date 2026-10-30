@@ -1,13 +1,14 @@
 import { useMutation } from '@tanstack/react-query';
 import { Check } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Text } from '@/components/text';
 import { Fonts, laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
+import { notify } from '@/lib/haptics';
 import { api, ApiError } from '@/lib/client';
 import type { Commit } from '@/lib/types';
 
@@ -31,7 +32,11 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
 
   const send = useMutation({
     mutationFn: () => api.reportCommit(commit!.id, reason, details.trim()),
-    onError: (exception) => setError(exception instanceof ApiError ? exception.firstError() : 'fatal: could not send the report.'),
+    onSuccess: () => notify('success'),
+    onError: (exception) => {
+      notify('error');
+      setError(exception instanceof ApiError ? exception.firstError() : 'fatal: could not send the report.');
+    },
   });
 
   const close = () => {
@@ -44,7 +49,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
 
   return (
     <Modal visible={commit !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
-      <KeyboardAvoidingView behavior="padding" style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom }]}>
+      <KeyboardAvoidingView behavior="padding" style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
         {send.isSuccess ? (
           <View style={styles.received}>
             <View style={styles.receivedRow}>
@@ -67,7 +72,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
             <View style={styles.reasons}>
               <Text variant="name">Why are you reporting this commit?</Text>
               {Reasons.map((option) => (
-                <Pressable key={option.value} onPress={() => setReason(option.value)} style={styles.reason} accessibilityRole="radio" accessibilityState={{ checked: reason === option.value }}>
+                <Pressable key={option.value} onPress={() => setReason(option.value)} style={({ pressed }) => [styles.reason, pressed && { backgroundColor: theme.wash }]} accessibilityRole="radio" accessibilityState={{ checked: reason === option.value }}>
                   <View style={[styles.radio, { borderColor: reason === option.value ? accent : theme.rail }]}>{reason === option.value && <View style={[styles.radioDot, { backgroundColor: accent }]} />}</View>
                   <Text>{option.label}</Text>
                 </Pressable>
@@ -89,7 +94,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
 
             {error && <Text variant="small" color={theme.destructive}>{error}</Text>}
 
-            <Button title="Send report" size="lg" disabled={reason === ''} busy={send.isPending} onPress={() => send.mutate()} style={{ backgroundColor: accent }} />
+            <Button title="Send report" size="lg" disabled={reason === ''} busy={send.isPending} onPress={() => send.mutate()} accent={accent} />
             <Button title="Cancel" variant="ghost" size="lg" onPress={close} />
           </ScrollView>
         )}
@@ -103,8 +108,8 @@ const styles = StyleSheet.create({
   form: { padding: Space.gutterWide - 4, paddingTop: 24, gap: 20 },
   heading: { gap: 8 },
   excerpt: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 12 },
-  reasons: { gap: 12 },
-  reason: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reasons: { gap: 4 },
+  reason: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: Radius.md, borderCurve: 'continuous' },
   radio: { width: 20, height: 20, borderRadius: Radius.full, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   radioDot: { width: 10, height: 10, borderRadius: Radius.full },
   details: { gap: 6 },

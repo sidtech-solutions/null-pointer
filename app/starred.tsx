@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/empty-state';
 import { Feed, feedItems } from '@/components/feed';
@@ -19,6 +20,7 @@ import { useCommitHandlers } from '@/lib/use-commit-handlers';
 
 export default function StarredScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const account = useAccount();
   const handlers = useCommitHandlers();
@@ -48,6 +50,7 @@ export default function StarredScreen() {
         }
       />
       <Feed
+        contentContainerStyle={{ paddingBottom: insets.bottom }}
         items={items}
         viewerId={account.user?.id}
         handlers={handlers}
@@ -81,7 +84,7 @@ export default function StarredScreen() {
           ) : query.isError ? (
             <EmptyState fatal={query.error.message} action="Try again" onAction={() => query.refetch()} />
           ) : (
-            <EmptyState fatal="fatal: no starred commits yet" action="Find something on Trending." onAction={() => router.replace('/(tabs)')}>
+            <EmptyState fatal="fatal: no starred commits yet" action="Find something on Trending." onAction={() => router.dismissTo({ pathname: '/(tabs)', params: { log: 'trending' } })}>
               Star a commit from your log and it shows up here.
             </EmptyState>
           )

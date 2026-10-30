@@ -53,10 +53,10 @@ export default function LogScreen() {
         accent={accent}
         right={
           <View style={styles.actions}>
-            <Pressable onPress={() => router.push('/search')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Find a developer">
+            <Pressable onPress={() => router.push('/search')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Find a developer">
               <Search size={22} color={theme.ink} strokeWidth={2} />
             </Pressable>
-            <Pressable onPress={() => router.push('/compose')} hitSlop={8} accessibilityRole="button" accessibilityLabel="New commit">
+            <Pressable onPress={() => router.push('/compose')} hitSlop={12} accessibilityRole="button" accessibilityLabel="New commit">
               <SquarePen size={22} color={theme.ink} strokeWidth={2} />
             </Pressable>
           </View>

@@ -95,9 +95,31 @@ export function eventText(message: Message, me: User | null | undefined): string
 
       // Direct threads leave the author out: there, it can only be the partner.
       return message.user ? `${actor} sent a ping` : 'you got a ping';
+    // Calls leave log lines as pings do: that one happened, never what was said.
+    case 'call_started':
+      return `${callActor(message, me)} started a call`;
+    case 'call_answered':
+      return `${callActor(message, me)} answered the call`;
+    case 'call_cancelled':
+      return `${callActor(message, me)} cancelled the call`;
+    case 'call_declined':
+      return `${callActor(message, me)} declined the call`;
+    case 'call_missed':
+      return `${callActor(message, me)} missed the call`;
+    case 'call_failed':
+      return `${callActor(message, me)} couldn't answer the call`;
     default:
       return message.body;
   }
+}
+
+/** Who a call line is about: "you" for the reader, else the handle; in a direct thread an authorless line is the partner's. */
+function callActor(message: Message, me: User | null | undefined): string {
+  if (isMine(message, me)) {
+    return 'you';
+  }
+
+  return message.user ? handleOf(message.user, me) : 'they';
 }
 
 /** Whether a conversation is quiet right now: muted until a moment still ahead, or for good. */

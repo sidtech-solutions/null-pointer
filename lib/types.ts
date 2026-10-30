@@ -210,7 +210,7 @@ export type PushAccess = 'open' | 'request' | 'waiting' | 'restricted' | 'closed
 
 export type OrgRole = 'maintainer' | 'contributor';
 
-export type OrgEvent = 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'promoted' | 'demoted' | 'inherited' | 'ping';
+export type OrgEvent = 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'promoted' | 'demoted' | 'inherited' | 'ping' | 'call_started' | 'call_answered' | 'call_cancelled' | 'call_declined' | 'call_missed' | 'call_failed';
 
 /** How long a conversation stays quiet; `off` ends a mute. */
 export type MuteDuration = 'hour' | 'tomorrow' | 'week' | 'forever' | 'off';
@@ -281,3 +281,9 @@ export type OrgThread = ThreadBase & { kind: 'org'; org: OrgRef; members: OrgMem
 export type Thread = DirectThread | OrgThread;
 
 export type Candidate = { user: User; reason: string | null };
+
+/** A relay the phones send the call through, with credentials good for one call. */
+export type IceServer = { urls: string[]; username: string; credential: string };
+
+/** The call ringing for the user: who, their offer, and whether that remote is muted. */
+export type IncomingCall = { partner: User; sdp: string; is_muted: boolean };

@@ -2,7 +2,7 @@ import { utf8 } from './bytes';
 import { currentKey } from './device-key';
 import { randomHex } from './random';
 import { signatureHeaders } from './signer';
-import type { Candidate, Commit, CommitPreview, CommitThread, CommitTranslation, Connection, CurrentUser, Device, InboxPage, InboxTab, IssueSuggestion, LinkPreview, Message, MessageReaction, MuteDuration, NewPoll, Notification, Organization, OrgRole, Page, Profile, ReactionUsage, RemotesFrom, ScheduledCommit, SuggestedUser, Thread, User, UserSettings } from './types';
+import type { Candidate, Commit, CommitPreview, CommitThread, CommitTranslation, Connection, CurrentUser, Device, IceServer, InboxPage, InboxTab, IncomingCall, IssueSuggestion, LinkPreview, Message, MessageReaction, MuteDuration, NewPoll, Notification, Organization, OrgRole, Page, Profile, ReactionUsage, RemotesFrom, ScheduledCommit, SuggestedUser, Thread, User, UserSettings } from './types';
 
 export const ProductionUrl = 'https://dev-null.sh';
 
@@ -686,6 +686,39 @@ export const api = {
   },
 
   /** A nudge with nothing to say: an event in the thread, and a push for the others. */
+  // Calls: the two short messages the phones need to find each other, held
+  // by dev-null.sh only while the call rings, and relay credentials for one
+  // call. The routes mirror the web's; they answer 404 until the API has them.
+  async incomingCall(): Promise<IncomingCall | null> {
+    const json = await send('GET', 'remotes/call');
+
+    return json.call ?? null;
+  },
+
+  async outgoingCall(handle: string): Promise<{ answer: string | null } | null> {
+    const json = await send('GET', `remotes/@${encode(handle)}/call`);
+
+    return json.call ?? null;
+  },
+
+  async startCall(handle: string, sdp: string): Promise<void> {
+    await send('POST', `remotes/@${encode(handle)}/call`, {}, { sdp });
+  },
+
+  async answerCall(handle: string, sdp: string): Promise<void> {
+    await send('PUT', `remotes/@${encode(handle)}/call`, {}, { sdp });
+  },
+
+  async endCall(handle: string, failed = false): Promise<void> {
+    await send('DELETE', `remotes/@${encode(handle)}/call`, {}, { failed });
+  },
+
+  async callIceServers(handle: string): Promise<{ iceServers: IceServer[]; relayOnly: boolean }> {
+    const json = await send('GET', `remotes/@${encode(handle)}/call/ice-servers`);
+
+    return { iceServers: json.ice_servers ?? [], relayOnly: json.is_relay_only !== false };
+  },
+
   async pingRemote(target: RemoteTarget): Promise<Message> {
     const json = await send('POST', `${remotePath(target)}/ping`);
 

@@ -1,13 +1,14 @@
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Ellipsis, ImagePlus, Mic, MoreHorizontal, Pin, SendHorizontal, UserPlus, X } from 'lucide-react-native';
+import { ChevronLeft, Ellipsis, ImagePlus, Mic, MoreHorizontal, Phone, Pin, SendHorizontal, UserPlus, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { CallConsole } from '@/components/call-console';
 import { AttachmentStrip, chooseImageSource, ToolbarButton, useAttachments } from '@/components/composer';
 import { OrgAvatar } from '@/components/conversation-row';
 import { EmptyState } from '@/components/empty-state';
@@ -19,6 +20,7 @@ import { Text } from '@/components/text';
 import { RecordingBar, VoiceDraftStrip } from '@/components/voice-note';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
+import { showCallConsole, startCall, useCall, useCallsEnabled } from '@/lib/call';
 import { api, ApiError, Unauthenticated } from '@/lib/client';
 import { dayKey, dayLabel } from '@/lib/display';
 import { tap } from '@/lib/haptics';
@@ -108,6 +110,13 @@ export default function ThreadScreen() {
   }, [thread.error, account, router]);
 
   const partner = data?.kind === 'direct' ? data.partner : null;
+  // A call with this thread's partner shows in the console here; the bar over the app steps aside meanwhile.
+  const call = useCall();
+  const callsEnabled = useCallsEnabled();
+  const callHere = call.status !== 'idle' && partner !== null && call.partner.handle === partner.handle ? call : null;
+  const partnerHandle = partner?.handle ?? null;
+
+  useEffect(() => (partnerHandle ? showCallConsole(partnerHandle) : undefined), [partnerHandle]);
   const members = useMemo<OrgMember[]>(() => (data?.kind === 'org' ? data.members : []), [data]);
   const role = data?.kind === 'org' ? data.role : null;
   const maintains = role === 'maintainer';
@@ -272,6 +281,18 @@ export default function ThreadScreen() {
 
   const openAuthor = useCallback((user: User) => router.push({ pathname: '/users/[username]', params: { username: user.handle } }), [router]);
 
+  // The offer carries this phone's addresses, so a call only goes once the person has said so.
+  const confirmCall = () => {
+    if (!partner) {
+      return;
+    }
+
+    Alert.alert(`Call @${partner.handle}?`, 'Audio to start with; the camera is yours to turn on. Relayed and encrypted end to end, so neither of you sees the other’s IP address.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Call', onPress: () => void startCall(partner) },
+    ]);
+  };
+
   const pingThem = useMutation({
     mutationFn: () => api.pingRemote(target),
     onSuccess: (message) => {
@@ -426,6 +447,10 @@ export default function ThreadScreen() {
 
     if (data && open && latestId > 0) {
       options.push({ label: 'Ping', run: () => pingThem.mutate() });
+
+      if (partner && callsEnabled && call.status === 'idle') {
+        options.push({ label: 'Call', run: confirmCall });
+      }
     }
 
     if (data && latestId > 0) {
@@ -637,6 +662,7 @@ export default function ThreadScreen() {
       <MentionSuggestions users={suggestions} onPick={pickMention} />
 
       <View style={[styles.bottom, { borderTopColor: theme.hairline, backgroundColor: theme.surface, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8) }]}>
+        {callHere && <CallConsole state={callHere} />}
         {typing && <Text variant="mono" muted style={styles.typing}>{typing}</Text>}
 
         {data && !open ? (
@@ -669,6 +695,7 @@ export default function ThreadScreen() {
               ) : (
                 <>
                   <ToolbarButton icon={ImagePlus} label={attachments.images.length >= MaxImages ? `Up to ${MaxImages} images per message` : 'Attach an image'} onPress={() => chooseImageSource(attachments.pick)} disabled={!open || attachments.picking || attachments.images.length >= MaxImages || draft !== null} />
+                  {partner && callsEnabled && latestId > 0 && <ToolbarButton icon={Phone} label={call.status === 'idle' ? `Call @${partner.handle}` : 'Already on a call'} onPress={confirmCall} disabled={!open || call.status !== 'idle'} />}
                   <TextInput
                     value={body}
                     onChangeText={change}

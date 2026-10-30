@@ -17,6 +17,10 @@ Every request goes to devnull (dev-null.sh, or an instance you configure) and no
 
 Links in posts open in the system's in-app browser; the site you open then sees you as any browser visit would.
 
+## Calls
+
+Calls in Remotes use your microphone, and your camera only while you turn it on; the phone asks before either is used. The audio and video go through Cloudflare's relay, encrypted end to end between the two phones, so neither devnull nor the relay can hear or see a call, and neither person sees the other's IP address. devnull only passes on the two short set-up messages the phones need, kept encrypted for as long as the call rings, and logs that a call happened in that remote, never what was said or for how long. Nothing is recorded. Builds from F-Droid do not include calls.
+
 ## Signing in
 
 Sign-in happens on dev-null.sh through GitHub. The app never sees your GitHub password. devnull records the device name (for example "devnull on iPhone 15 Pro") and the key's fingerprint so you can revoke the device later from devnull's settings.

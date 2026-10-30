@@ -10,10 +10,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { applyThemePreference, useTheme } from '@/constants/theme';
+import { CallBar } from '@/components/call-bar';
 import { ReportSheet } from '@/components/report-sheet';
 import { OptionsHost } from '@/components/options-host';
 import { ToastHost } from '@/components/toast-host';
 import { AccountProvider, useAccount } from '@/lib/account';
+import { watchIncomingCalls } from '@/lib/call';
 import { reportCommit, useReporting } from '@/lib/report-store';
 import { wireNetwork } from '@/lib/network';
 import { push } from '@/lib/outbox';
@@ -116,6 +118,9 @@ function RootLayoutNav() {
     }
   }, [status]);
 
+  // Signed in, the app listens for a call ringing while it is in front.
+  useEffect(() => (signedIn ? watchIncomingCalls() : undefined), [signedIn]);
+
   if (status === 'loading') {
     return null;
   }
@@ -159,6 +164,7 @@ function RootLayoutNav() {
       <ReportSheet commit={reporting} onClose={() => reportCommit(null)} />
       <OptionsHost />
       <ToastHost />
+      <CallBar />
     </ThemeProvider>
   );
 }

@@ -61,7 +61,7 @@
         "expo-build-properties",
         {
           "android": {
-            "extraProguardRules": "# WorkManager (used by the home screen widget) creates its database, workers and input mergers by name; R8 must keep them whole.\n-keep class androidx.work.** { *; }\n-keep class * extends androidx.work.ListenableWorker { *; }\n-keep class * extends androidx.work.InputMerger { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class com.reactnativeandroidwidget.** { *; }"
+            "extraProguardRules": "# WorkManager (used by the home screen widget) creates its database, workers and input mergers by name; R8 must keep them whole.\n-keep class androidx.work.** { *; }\n-keep class * extends androidx.work.ListenableWorker { *; }\n-keep class * extends androidx.work.InputMerger { *; }\n-keep class * extends androidx.room.RoomDatabase { *; }\n-keep class com.reactnativeandroidwidget.** { *; }\n# WebRTC (calls) reaches its native code by name; its optional AV1 decoder classes are absent from the prebuilt library.\n-keep class org.webrtc.** { *; }\n-dontwarn org.webrtc.**"
           }
         }
       ],
@@ -105,8 +105,8 @@
         "expo-image-picker",
         {
           "photosPermission": "null-pointer uses your photos to attach images to a commit.",
-          "cameraPermission": "null-pointer uses the camera to take a photo for a commit.",
-          "microphonePermission": "null-pointer uses the microphone to record voice notes for Remotes."
+          "cameraPermission": "null-pointer uses the camera to take a photo for a commit, and on a call only while you turn it on.",
+          "microphonePermission": "null-pointer uses the microphone for voice notes and calls in Remotes."
         }
       ],
       "./plugins/with-unsigned-release",

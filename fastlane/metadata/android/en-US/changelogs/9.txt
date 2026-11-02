@@ -1,0 +1,1 @@
+Accessibility and UX refinements across the app. The commit composer keeps its toolbar above the keyboard.

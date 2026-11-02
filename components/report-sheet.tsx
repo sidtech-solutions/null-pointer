@@ -1,10 +1,11 @@
 import { useMutation } from '@tanstack/react-query';
 import { Check } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { SheetKeyboardAvoidingView } from '@/components/sheet-keyboard-avoiding-view';
 import { Text } from '@/components/text';
 import { Fonts, laneColor, Radius, Space, useTheme } from '@/constants/theme';
 import { useAccount } from '@/lib/account';
@@ -49,7 +50,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
 
   return (
     <Modal visible={commit !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
-      <KeyboardAvoidingView behavior="padding" style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
+      <SheetKeyboardAvoidingView behavior="padding" style={[styles.sheet, { backgroundColor: theme.surface, paddingBottom: insets.bottom, paddingTop: Platform.OS === 'android' ? insets.top : 0 }]}>
         {send.isSuccess ? (
           <View style={styles.received}>
             <View style={styles.receivedRow}>
@@ -98,7 +99,7 @@ export function ReportSheet({ commit, onClose }: { commit: Commit | null; onClos
             <Button title="Cancel" variant="ghost" size="lg" onPress={close} />
           </ScrollView>
         )}
-      </KeyboardAvoidingView>
+      </SheetKeyboardAvoidingView>
     </Modal>
   );
 }

@@ -3,13 +3,14 @@ import { useLocalSearchParams, useNavigation, usePreventRemove, useRouter } from
 import { useShareIntentContext } from 'expo-share-intent';
 import { Clock, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommitBody } from '@/components/commit-body';
 import { DraftPreview } from '@/components/draft-preview';
 import { DraftTools } from '@/components/draft-tools';
 import { SchedulePicker } from '@/components/schedule-picker';
+import { SheetKeyboardAvoidingView } from '@/components/sheet-keyboard-avoiding-view';
 import { AttachmentStrip, ComposerToolbar, DraftCounter, DraftInput, emptyPoll, PollEditor, pollFits, StashLabel, toUploads, useAttachments } from '@/components/composer';
 import { Text } from '@/components/text';
 import { laneColor, Radius, Space, useTheme } from '@/constants/theme';
@@ -225,7 +226,7 @@ export default function ComposeScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? Math.max(12, insets.top - 44) : insets.top }]}>
+    <SheetKeyboardAvoidingView behavior="padding" style={[styles.screen, { backgroundColor: theme.surface, paddingTop: Platform.OS === 'ios' ? Math.max(12, insets.top - 44) : insets.top }]}>
       <View style={[styles.bar, { borderBottomColor: theme.hairline }]}>
         <Pressable onPress={cancel} disabled={busy} hitSlop={8} style={styles.barButton} accessibilityRole="button" accessibilityHint="Keeps your draft for next time">
           <Text variant="nav">Cancel</Text>
@@ -299,7 +300,7 @@ export default function ComposeScreen() {
           </View>
         )}
       </DraftTools>
-    </KeyboardAvoidingView>
+    </SheetKeyboardAvoidingView>
   );
 }
 

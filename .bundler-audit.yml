@@ -1,0 +1,3 @@
+# bundler-audit ignore list. Run `bundle-audit check --update` to audit Gemfile.lock.
+ignore:
+  - GHSA-8474-xrp6-wh69

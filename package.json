@@ -13,7 +13,7 @@
     "@tanstack/query-sync-storage-persister": "^5.104.5",
     "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-query-persist-client": "^5.104.5",
-    "expo": "~58.0.16",
+    "expo": "~58.0.23",
     "expo-audio": "~58.0.10",
     "expo-build-properties": "~58.0.11",
     "expo-clipboard": "~58.0.4",
@@ -63,6 +63,26 @@
     "jest-expo": "^58.0.11",
     "patch-package": "8.0.1",
     "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "glob": "^14.0.2",
+    "@bacons/apple-targets": {
+      "minimatch": "^11.0.1"
+    },
+    "@expo/fingerprint": {
+      "minimatch": "^11.0.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    },
+    "test-exclude": {
+      ".": "^7.0.2",
+      "minimatch": "^11.0.1"
+    },
+    "@bacons/xcode": {
+      "uuid": "^11.1.1",
+      "@xmldom/xmldom": "^0.8.15"
+    }
   },
   "scripts": {
     "start": "expo start",

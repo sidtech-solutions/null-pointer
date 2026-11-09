@@ -112,6 +112,7 @@
       "./plugins/with-unsigned-release",
       "./plugins/with-gradle-wrapper-timeout",
       "./plugins/with-reproducible-build",
+      "./plugins/with-dependency-pins",
       [
         "expo-splash-screen",
         {
